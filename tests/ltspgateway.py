@@ -180,6 +180,7 @@ def run(binary, evidence):
                     "model_parameters_url":(app/"fixture-pricing.json").as_uri(),"mcp_library_sync_interval":0,"live_models_sync_interval":0}},
                 "client": {"enable_logging": True, "disable_content_logging": True,
                            "enforce_auth_on_inference": False,
+                           "log_retention_days": 90,
                            "allow_per_request_content_storage_override": False, "allow_direct_keys": False},
                 "config_store": {"enabled": True, "type": "sqlite", "config": {"path": str(app / "config.db")}},
                 "logs_store": {"enabled": True, "type": "sqlite", "config": {"path": str(app / "logs.db")}},
@@ -225,7 +226,8 @@ def run(binary, evidence):
                 cfg=json.loads(request(url+"/api/config")[1])["client_config"]
                 cfg["enforce_auth_on_inference"]=True
                 cfg["vk_rotation_cooldown"]="0s"
-                assert request(url+"/api/config",{"client_config":cfg},method="PUT")[0]==200
+                status,raw=request(url+"/api/config",{"client_config":cfg},method="PUT")
+                assert status==200,("configure client auth",status,raw[:400])
                 assert json.loads(request(url+"/api/session/is-auth-enabled")[1])["inference_auth_enforced"]
                 def auth_headers(extra=None):return {"Authorization":"Bearer "+access,**(extra or {})}
                 status, home = request(url + "/")
