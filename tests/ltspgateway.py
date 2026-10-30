@@ -253,7 +253,7 @@ def run(binary, evidence):
                 today = datetime.date.today().isoformat()
                 policy = json.loads(request(url+"/api/ltsp/accounts")[1])
                 schedules = policy["provider_schedules"]
-                assert len(schedules)==2 and all(s["timezone"]=="UTC" and s["cutoff"]=="20:00" for s in schedules)
+                assert len(schedules)==2 and all(s["timezone"]=="America/Los_Angeles" and s["cutoff"]=="20:00" for s in schedules)
                 for s in schedules:
                     s["probe_model"] = "gpt-6.1-sol" if s["provider"]=="openai" else "claude-test"
                 accounts = [{"id": "account-a", "name": "A", "provider": "openai", "key_ids": [ids["a1"], ids["a2"]],

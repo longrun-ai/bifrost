@@ -220,6 +220,11 @@ func TestDisabledKeyIsNotReenabled(t *testing.T) {
 
 func TestSchedulesAreRequiredValidatedAndPersisted(t *testing.T) {
 	m := manager(t)
+	for _, s := range m.Schedules() {
+		if s.Timezone != "America/Los_Angeles" || s.Cutoff != "20:00" {
+			t.Fatal("new provider defaults must use Los Angeles at 20:00", s)
+		}
+	}
 	for _, mutate := range []func([]ProviderSchedule) []ProviderSchedule{
 		func(s []ProviderSchedule) []ProviderSchedule { return nil },
 		func(s []ProviderSchedule) []ProviderSchedule { return s[:1] },

@@ -4,7 +4,11 @@
   <title>API 账号 · LTSP 网关</title>
   <style>
     :root {
-      color-scheme: light dark;
+      color-scheme: light;
+      --control-background: #fff;
+      --control-foreground: #182438;
+      --control-border: #c5cedd;
+      --muted: #64748b;
       font:
         15px/1.6 system-ui,
         sans-serif;
@@ -53,7 +57,7 @@
     #save-state,
     #provider-save-state {
       font-size: 13px;
-      color: #64748b;
+      color: var(--muted);
     }
     .policy-section {
       border: 1px solid #dce1eb;
@@ -71,6 +75,9 @@
     }
     .section-footer .save-toolbar {
       margin-left: auto;
+    }
+    #account-groups {
+      container: account-groups / inline-size;
     }
     dialog {
       width: 440px;
@@ -148,8 +155,14 @@
       display: block;
       width: 100%;
       margin-top: 5px;
-      background: transparent;
-      color: inherit;
+      background: var(--control-background);
+      color: var(--control-foreground);
+      border-color: var(--control-border);
+    }
+    option,
+    optgroup {
+      background: var(--control-background);
+      color: var(--control-foreground);
     }
     button {
       cursor: pointer;
@@ -323,13 +336,115 @@
       font-size: 12px;
     }
     .group-table {
-      min-width: 1040px;
+      table-layout: fixed;
     }
-    .group-table td:first-child {
-      min-width: 170px;
+    .group-table th,
+    .group-table td {
+      padding: 10px 8px;
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
-    .group-table td:nth-child(5) {
-      min-width: 150px;
+    .group-table th {
+      white-space: normal;
+    }
+    .group-table th:nth-child(1) {
+      width: 23%;
+    }
+    .group-table th:nth-child(2) {
+      width: 12%;
+    }
+    .group-table th:nth-child(3) {
+      width: 20%;
+    }
+    .group-table th:nth-child(4) {
+      width: 9%;
+    }
+    .group-table th:nth-child(5) {
+      width: 15%;
+    }
+    .group-table th:nth-child(6) {
+      width: 21%;
+    }
+    .group-table input,
+    .group-table select {
+      min-width: 0;
+      padding: 7px 6px;
+      font-size: 13px;
+    }
+    .group-table input[name="name"] {
+      font-size: 14px;
+    }
+    .group-table .status,
+    .group-table .stats {
+      font-size: 13px;
+    }
+    .group-table .actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+    }
+    .group-table .stats {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .group-table .remove {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .group-table .probe {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      font-size: 13px;
+      padding: 6px;
+    }
+    @container account-groups (max-width: 780px) {
+      .group-table,
+      .group-table tbody {
+        display: block;
+      }
+      .group-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+      .group-table tr[data-id] {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 1fr);
+        border-bottom: 1px solid var(--control-border);
+      }
+      .group-table tr[data-id]:last-child {
+        border-bottom: 0;
+      }
+      .group-table td {
+        display: block;
+        border-bottom: 0;
+        padding: 12px;
+      }
+      .group-table td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+    }
+    @container account-groups (max-width: 540px) {
+      .group-table tr[data-id] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .group-table td:first-child,
+      .group-table td:last-child {
+        grid-column: 1 / -1;
+      }
+    }
+    @container account-groups (max-width: 360px) {
+      .group-table tr[data-id] {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
     .recovery-info,
     .icon-button {
@@ -415,6 +530,11 @@
     }
     @media (prefers-color-scheme: dark) {
       :root {
+        color-scheme: dark;
+        --control-background: #121923;
+        --control-foreground: #e0e6f2;
+        --control-border: #394458;
+        --muted: #a0aec3;
         background: #121923;
         color: #e0e6f2;
       }
@@ -442,6 +562,16 @@
       a,
       button.secondary {
         color: #9bb6ff;
+      }
+      .ok {
+        color: #79d9a3;
+      }
+      .hold {
+        color: #f3bd77;
+      }
+      button.danger {
+        color: #ff9fac;
+        border-color: #ff9fac;
       }
     }
   </style>
@@ -635,8 +765,8 @@
     <section id="upstream-settings" class="policy-section" aria-labelledby="providers-title">
       <h2 id="providers-title">上游配置</h2>
       <p>
-        时区与刷新截止时间一起确定重试起点。默认 UTC 20:00；从账号组刷新日期当天的截止时间起允许重试
-        48 小时，失败仍逐步退避。
+        时区与刷新截止时间一起确定重试起点。默认 America/Los_Angeles
+        20:00，随夏令时调整；从账号组刷新日期当天的截止时间起允许重试 48 小时，失败仍逐步退避。
       </p>
       <div id="provider-settings" class="table-scroll">
         <table class="provider-table" aria-label="上游配置">
@@ -682,18 +812,18 @@
   </main>
   <template id="group-row"
     ><tr>
-      <td>
+      <td data-label="账号组名称">
         <input aria-label="账号组名称" name="name" maxlength="200" /><small
           class="key-count"
         ></small>
       </td>
-      <td>
+      <td data-label="上游">
         <select aria-label="账号组上游" name="provider">
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option></select
         ><small class="provider-hint">先清空账号关联，再改上游</small>
       </td>
-      <td>
+      <td data-label="刷新日期／周期">
         <input aria-label="刷新日期" name="refresh_date" type="date" /><select
           aria-label="刷新周期"
           name="cycle"
@@ -702,8 +832,8 @@
           <option value="annual">每年</option></select
         ><small class="refresh-zone"></small>
       </td>
-      <td class="balance"></td>
-      <td>
+      <td class="balance" data-label="真实余额"></td>
+      <td data-label="状态与重试">
         <span class="status"></span>
         <button
           type="button"
@@ -720,9 +850,10 @@
           ><br /><span class="last-checked"></span><br /><span class="last-result"></span>
         </div>
       </td>
-      <td>
+      <td data-label="操作">
         <div class="actions">
-          <a class="stats" target="_blank" rel="noopener noreferrer">查看该组调用统计 ↗</a
+          <a class="stats" target="_blank" rel="noopener noreferrer" aria-label="查看该组调用统计"
+            >调用统计 ↗</a
           ><button class="probe">已到账，立即重试</button
           ><button class="remove danger icon-button" aria-label="删除账号组" title="删除账号组">
             <svg
@@ -1268,7 +1399,7 @@
           body.append(row);
         }
         const settings = state.provider_schedules.find((s) => s.provider === group.provider);
-        const zone = settings?.timezone ?? "UTC";
+        const zone = settings?.timezone ?? "America/Los_Angeles";
         const count = (group.key_ids || []).length;
         for (const field of ["name", "provider", "refresh_date", "cycle"]) {
           const input = row.querySelector(`[name=${field}]`);

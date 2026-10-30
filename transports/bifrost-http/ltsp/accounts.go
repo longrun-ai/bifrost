@@ -51,8 +51,8 @@ type ProviderSchedule struct {
 
 func defaultSchedules() []ProviderSchedule {
 	return []ProviderSchedule{
-		{Provider: "openai", Timezone: "UTC", Cutoff: "20:00"},
-		{Provider: "anthropic", Timezone: "UTC", Cutoff: "20:00"},
+		{Provider: "openai", Timezone: "America/Los_Angeles", Cutoff: "20:00"},
+		{Provider: "anthropic", Timezone: "America/Los_Angeles", Cutoff: "20:00"},
 	}
 }
 

@@ -16,7 +16,8 @@ Missing session IDs receive source-IP affinity. Account policy runs at the real
 provider attempt boundary, so a held sibling key cannot bypass a shared balance.
 Only explicit upstream credit exhaustion pauses an account; generic quota, rate,
 auth and network errors do not establish exhaustion. Each provider has a required
-timezone and local refresh cutoff (defaults: UTC, 20:00). The home offers a signed
+timezone and local refresh cutoff (defaults: America/Los_Angeles, 20:00). Existing
+explicit provider settings are retained. The home offers a signed
 GMT hour plus :00/:30 offset, or an IANA region for DST and other offsets.
 A group's editable
 monthly/annual date combines with that cutoff to open a 48-hour real-traffic
@@ -63,7 +64,10 @@ Unsaved policy changes must be saved before pressing the probe button.
 Tables reconcile existing rows and choices by stable group/key/provider IDs.
 Unchanged fields are not written; ordinary edits, saving and probe results preserve
 DOM identity, focus, selection, expansion and scroll. Only new/deleted data items
-create/remove corresponding nodes.
+create/remove corresponding nodes. Account groups use compact columns at wider
+widths and labeled wrapping fields in split panes and narrow views, retaining the
+same rows and inputs without horizontal scrolling. Native selects and option menus
+share explicit light/dark foreground/background colors with form controls.
 Each candidate is an ordinary logged inference through the gateway's native HTTP
 admission pipeline using the current shared native Virtual Key, pinned to one
 enabled, model-eligible key without native retry or fallback. A random, single-use,

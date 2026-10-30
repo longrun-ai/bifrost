@@ -277054,6 +277054,7 @@
                   "pm.test('Home includes folded examples and scoped account controls', function () {",
                   "  pm.expect(pm.response.code,pm.response.text()).to.equal(200);",
                   "  var html=pm.response.text();",
+                  "  pm.expect(html).to.match(/默认\\s+America\\/Los_Angeles\\s+20:00/);",
                   "  ['id=\"openai-python\"','id=\"anthropic-python\"','id=\"add-native-account\"','id=\"account-dialog\"','id=\"provider-dirty-dot\"','id=\"dirty-dot\"','/chat/completions','/responses','/completions'].forEach(function (s) { pm.expect(html).to.include(s); });",
                   "  pm.expect(html).to.match(/<details[^>]*id=\"openai-python\"[^>]*>/);",
                   "  pm.expect(html.match(/<details[^>]*id=\"openai-python\"[^>]*>/)[0]).not.to.match(/\\sopen(?:\\s|>|=)/);",

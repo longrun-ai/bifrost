@@ -696,3 +696,95 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
   await expect(page.locator("#provider-dirty-dot")).toBeHidden();
   expect(prefs[0].cutoff).toBe("21:00");
 });
+
+test("LTSP group layout fits split panes and controls follow light and dark themes", async ({
+  page,
+}) => {
+  await page.route("**/api/ltsp/accounts", (route) =>
+    route.fulfill({
+      json: {
+        accounts: [
+          {
+            id: "responsive-group",
+            name: "Long account name for split pane",
+            provider: "openai",
+            key_ids: ["responsive-key"],
+            refresh_date: "2026-10-30",
+            cycle: "monthly",
+            balance: "unknown",
+          },
+        ],
+        keys: { openai: [{ id: "responsive-key", name: "Responsive account", enabled: true }] },
+        provider_schedules: schedules.map((s) => ({ ...s, timezone: "America/Los_Angeles" })),
+        access_key_name: "ltsp-lan-clients",
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(page.getByLabel("OpenAI 地区时区", { exact: true })).toHaveValue(
+    "America/Los_Angeles",
+  );
+  const stable = await page.getByLabel("账号组名称").evaluateHandle((el) => el);
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const width of [1280, 960, 820, 640, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const fits = await page
+        .locator("#accounts")
+        .evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+      expect(
+        fits,
+        `Account groups need no horizontal scroll at ${width}px in ${scheme} mode`,
+      ).toBeTruthy();
+      for (const selector of [
+        "#accounts input",
+        "#accounts select",
+        "#accounts .probe",
+        "#accounts .remove",
+      ]) {
+        const inside = await page
+          .locator(selector)
+          .first()
+          .evaluate((el) => {
+            const box = el.getBoundingClientRect(),
+              table = document.querySelector("#accounts")!.getBoundingClientRect();
+            return box.width > 20 && box.left >= table.left && box.right <= table.right;
+          });
+        expect(inside, `${selector} remains usable at ${width}px`).toBeTruthy();
+      }
+      expect(
+        await stable.evaluate((el) => el === document.querySelector("#accounts input[name=name]")),
+      ).toBeTruthy();
+    }
+    const colors = await page
+      .locator("#provider-settings select[name=timezone_mode]")
+      .first()
+      .evaluate((el) => {
+        const select = getComputedStyle(el),
+          option = getComputedStyle(el.querySelector("option")!);
+        return {
+          background: select.backgroundColor,
+          foreground: select.color,
+          optionBackground: option.backgroundColor,
+          optionForeground: option.color,
+        };
+      });
+    expect(colors.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(colors.optionBackground).toBe(colors.background);
+    expect(colors.optionForeground).toBe(colors.foreground);
+    if (scheme === "dark") {
+      const channels = colors.background.match(/\d+/g)!.slice(0, 3).map(Number);
+      expect(Math.max(...channels), "Dark select menu must have a dark background").toBeLessThan(
+        100,
+      );
+    }
+    await page.getByRole("button", { name: "添加账号", exact: true }).click();
+    const dialogColors = await page.locator("#account-provider").evaluate((el) => ({
+      select: getComputedStyle(el).backgroundColor,
+      option: getComputedStyle(el.querySelector("option")!).backgroundColor,
+    }));
+    expect(dialogColors.select).toBe(colors.background);
+    expect(dialogColors.option).toBe(colors.background);
+    await page.locator("#account-cancel").click();
+  }
+});
