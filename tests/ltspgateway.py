@@ -55,13 +55,17 @@ class Upstream(http.server.BaseHTTPRequestHandler):
                                           "created_at": "2026-01-01T00:00:00Z"}], "has_more": False,
                                  "first_id": "claude-test", "last_id": "claude-test"})
             return
-        self.send_json(200, {"object": "list", "data": [{"id": "gpt-6.1-sol", "object": "model", "created": 0, "owned_by": "openai"}]})
+        self.send_json(200, {"object": "list", "data": [{"id": model, "object": "model", "created": 0, "owned_by": "openai"}
+                                                      for model in ("gpt-6.1-sol", "gpt-fixture-retired")]})
 
     def do_POST(self):
         b = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         key = self.headers.get("x-api-key") or self.headers.get("Authorization", "").removeprefix("Bearer ")
         with self.lock:
             self.calls.append({"key": key, "path": self.path, "body": b})
+        if b.get("model") == "gpt-fixture-retired":
+            self.send_json(404, {"error": {"code": "model_not_found", "type": "invalid_request_error", "message": "model not found"}})
+            return
         if key.startswith("fixture-c"):
             if self.depleted_anthropic:
                 self.send_json(400,{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}})
@@ -167,7 +171,7 @@ def run(binary, evidence):
     prices={model:{"provider":provider,"mode":"chat","base_model":model,"input_cost_per_token":2e-6,
                    "output_cost_per_token":1e-5,"cache_read_input_token_cost":1e-7,"cache_creation_input_token_cost":2.5e-6,
                    "max_input_tokens":128000,"max_output_tokens":16000,"model_parameters":[]}
-            for model,provider in (("gpt-6.1-sol","openai"),("claude-test","anthropic"))}
+            for model,provider in (("gpt-6.1-sol","openai"),("gpt-fixture-retired","openai"),("claude-test","anthropic"))}
     (app/"fixture-pricing.json").write_text(json.dumps(prices))
     # Resolve an ephemeral listener without assuming a free fixed production port.
     with socket.socket() as s:
@@ -244,13 +248,23 @@ def run(binary, evidence):
                         assert status in (200,201),("API key registration",status,raw[:400])
                 assert request(url+"/api/ltsp/accounts",headers={"Origin":"https://unrelated.example"})[0]==403
                 today = datetime.date.today().isoformat()
+                policy = json.loads(request(url+"/api/ltsp/accounts")[1])
+                schedules = policy["provider_schedules"]
+                assert len(schedules)==2 and all(s["timezone"]=="UTC" and s["cutoff"]=="20:00" for s in schedules)
+                for s in schedules:
+                    s["probe_model"] = "gpt-6.1-sol" if s["provider"]=="openai" else "claude-test"
                 accounts = [{"id": "account-a", "name": "A", "provider": "openai", "key_ids": [ids["a1"], ids["a2"]],
-                             "cycle": "monthly", "refresh_date": today, "probe_model": "gpt-6.1-sol"},
+                             "cycle": "monthly", "refresh_date": today},
                             {"id": "account-b", "name": "B", "provider": "openai", "key_ids": [ids["b1"]],
-                             "cycle": "monthly", "refresh_date": today, "probe_model": "gpt-6.1-sol"},
+                             "cycle": "monthly", "refresh_date": today},
                             {"id":"account-c","name":"C","provider":"anthropic","key_ids":list(anthropic_ids.values()),
-                             "cycle":"monthly","refresh_date":today,"probe_model":"claude-test"}]
-                assert request(url + "/api/ltsp/accounts", {"accounts": accounts}, method="PUT")[0] == 200
+                             "cycle":"monthly","refresh_date":today}]
+                assert request(url + "/api/ltsp/accounts", {"accounts": accounts,"provider_schedules":schedules}, method="PUT")[0] == 200
+                bad_accounts=json.loads(json.dumps(accounts));bad_accounts[0]["key_ids"]=[anthropic_ids["c1"]]
+                assert request(url+"/api/ltsp/accounts",{"accounts":bad_accounts,"provider_schedules":schedules},method="PUT")[0]==400
+                assert request(url+"/api/ltsp/accounts",{"accounts":accounts,"provider_schedules":[]},method="PUT")[0]==400
+                policy=json.loads(request(url+"/api/ltsp/accounts")[1])
+                assert "balance" not in policy and all(a["balance"]=="unknown" for a in policy["accounts"])
                 payload = {"model": "openai/gpt-6.1-sol", "messages": [{"role": "user", "content": "fixture-sensitive-prompt-do-not-log"}]}
 
                 def inference(extra=None, body=None, path="/v1/chat/completions"):
@@ -334,6 +348,29 @@ def run(binary, evidence):
                 before=len(Upstream.calls)
                 assert json.loads(request(url+"/api/ltsp/accounts/account-a/probe",{})[1])["recovered"]
                 assert len(Upstream.calls)==before+1,"probe did not use rotated native credential"
+                # Catalog discovery and a retired preferred model use the same
+                # ordinary authenticated/logged provider-attempt pipeline.
+                for preferred in ("gpt-fixture-retired", ""):
+                    schedules[0]["probe_model"]=preferred
+                    assert request(url+"/api/ltsp/accounts",{"accounts":accounts,"provider_schedules":schedules},method="PUT")[0]==200
+                    before=len(Upstream.calls)
+                    status,raw=request(url+"/api/ltsp/accounts/account-a/probe",{})
+                    assert status==200 and json.loads(raw)["recovered"],raw
+                    attempted=[call["body"]["model"] for call in Upstream.calls[before:]]
+                    assert attempted[-1]=="gpt-6.1-sol" and len(attempted)==len(set(attempted)) and len(attempted)<=2,attempted
+                    if preferred:assert attempted==["gpt-fixture-retired","gpt-6.1-sol"],attempted
+                    policy=json.loads(request(url+"/api/ltsp/accounts")[1])
+                    schedules=policy["provider_schedules"]
+                    assert schedules[0]["probe_model"]=="gpt-6.1-sol"
+                schedules[1]["probe_model"]=""
+                schedules[0].update(timezone="Asia/Shanghai",cutoff="21:30")
+                assert request(url+"/api/ltsp/accounts",{"accounts":accounts,"provider_schedules":schedules},method="PUT")[0]==200
+                assert json.loads(request(url+"/api/ltsp/accounts/account-c/probe",{})[1])["recovered"]
+                policy=json.loads(request(url+"/api/ltsp/accounts")[1])
+                assert policy["provider_schedules"][1]["probe_model"]=="claude-test"
+                start=datetime.datetime.fromisoformat(policy["accounts"][0]["retry_start"])
+                end=datetime.datetime.fromisoformat(policy["accounts"][0]["retry_end"])
+                assert start.hour==21 and start.minute==30 and start.utcoffset()==datetime.timedelta(hours=8) and end-start==datetime.timedelta(hours=48)
                 # A real process restart must preserve UI-registered keys and a hold.
                 Upstream.depleted=True
                 assert request(url+"/v1/chat/completions",payload,auth_headers({"x-bf-api-key-id":ids["a1"]}))[0]!=200
@@ -350,6 +387,8 @@ def run(binary, evidence):
                 else:raise AssertionError("persisted hold not restored")
                 before=len(Upstream.calls)
                 assert json.loads(request(url+"/api/session/is-auth-enabled")[1])["inference_auth_enforced"],"inference auth did not persist"
+                restored=json.loads(request(url+"/api/ltsp/accounts")[1])["provider_schedules"]
+                assert restored[0]["timezone"]=="Asia/Shanghai" and restored[0]["cutoff"]=="21:30" and restored[0]["probe_model"]=="gpt-6.1-sol" and restored[1]["probe_model"]=="claude-test"
                 assert request(url+"/openai/chat/completions",payload,{"Authorization":"Bearer dummy-api-key"})[0] in (401,403)
                 assert request(url+"/v1/chat/completions",payload,auth_headers({"x-bf-api-key-id":ids["a2"]}))[0]!=200
                 assert len(Upstream.calls)==before
@@ -372,7 +411,7 @@ def run(binary, evidence):
                 else:
                     raise AssertionError("native usage/session metadata was not recorded")
                 (evidence / "result.json").write_text(json.dumps({"passed": True, "inference_calls": len(Upstream.calls),
-                    "proxy_connections": Proxy.connections, "checks": ["HTTP forwarding", "SSE", "fixed proxy", "IP/native session affinity",
+                    "proxy_connections": Proxy.connections, "checks": ["required upstream timezone/cutoff and per-group balances", "same-provider group assignment", "catalog model discovery/replacement/persistence", "HTTP forwarding", "SSE", "fixed proxy", "IP/native session affinity",
                     "12h default/30m explicit", "account hold", "healthy pool fallback", "immediate single probe", "native usage without prompt content", "required native virtual key", "generated/custom rotation and old-key rejection", "auth/key persistence"]}, indent=2))
                 print("Bifrost real-binary local-upstream integration passed")
             finally:

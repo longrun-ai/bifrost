@@ -1,585 +1,1099 @@
 <!doctype html>
 <html lang="zh-CN">
-	<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-	<title>API 账号 · LTSP 网关</title>
-	<style>
-		:root {
-			color-scheme: light dark;
-			font:
-				15px/1.6 system-ui,
-				sans-serif;
-			background: #f5f6fa;
-			color: #182438;
-		}
-		* {
-			box-sizing: border-box;
-		}
-		body {
-			margin: 0;
-		}
-		main {
-			max-width: 1100px;
-			margin: 40px auto;
-			padding: 0 24px;
-		}
-		nav {
-			display: flex;
-			gap: 24px;
-			flex-wrap: wrap;
-		}
-		a {
-			color: #315ac8;
-		}
-		h1 {
-			font-size: 28px;
-			margin: 24px 0 4px;
-		}
-		p {
-			color: #56647a;
-		}
-		.bar {
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			gap: 20px;
-			flex-wrap: wrap;
-		}
-		.card {
-			background: white;
-			border: 1px solid #dce1eb;
-			border-radius: 14px;
-			padding: 24px;
-			margin: 20px 0;
-		}
-		.grid {
-			display: grid;
-			grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-			gap: 18px;
-		}
-		label {
-			display: block;
-			font-weight: 600;
-		}
-		input,
-		select,
-		button {
-			font: inherit;
-			border: 1px solid #c5cedd;
-			border-radius: 7px;
-			padding: 9px 11px;
-		}
-		input,
-		select {
-			display: block;
-			width: 100%;
-			margin-top: 5px;
-			background: transparent;
-			color: inherit;
-		}
-		button {
-			cursor: pointer;
-			background: #315ac8;
-			color: white;
-			border-color: #315ac8;
-		}
-		button.secondary {
-			background: transparent;
-			color: #315ac8;
-		}
-		button.danger {
-			background: transparent;
-			color: #a52e3e;
-			border-color: #a52e3e;
-		}
-		button:disabled {
-			cursor: wait;
-			opacity: 0.55;
-		}
-		.keys {
-			margin: 18px 0;
-			padding: 12px;
-			background: #f5f6fa;
-			border-radius: 8px;
-		}
-		.keys label {
-			font-weight: 400;
-			display: flex;
-			gap: 10px;
-			align-items: center;
-		}
-		.keys input {
-			width: auto;
-			margin: 0;
-		}
-		.status {
-			font-weight: 600;
-		}
-		.hold {
-			color: #a65516;
-		}
-		.ok {
-			color: #267847;
-		}
-		small {
-			color: #64748b;
-		}
-		#message {
-			white-space: pre-wrap;
-			min-height: 24px;
-		}
-		#message.error {
-			color: #a52e3e;
-		}
-		.actions {
-			display: flex;
-			gap: 12px;
-			flex-wrap: wrap;
-			margin-top: 18px;
-		}
-		.empty {
-			padding: 40px;
-			text-align: center;
-		}
-		.badge {
-			border: 1px solid #dce1eb;
-			padding: 3px 10px;
-			border-radius: 20px;
-		}
-		footer {
-			margin: 28px 0;
-			color: #64748b;
-			font-size: 13px;
-		}
-		h2 {
-			margin: 0;
-			font-size: 21px;
-		}
-		.connection-grid {
-			display: grid;
-			grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
-			gap: 20px;
-			margin-top: 18px;
-		}
-		.copy-line {
-			display: flex;
-			align-items: center;
-			gap: 12px;
-			margin-top: 8px;
-		}
-		.copy-line code {
-			flex: 1;
-			overflow-wrap: anywhere;
-		}
-		#access-controls {
-			flex-wrap: wrap;
-		}
-		#downstream-key {
-			flex: 1 1 240px;
-			min-width: 0;
-			margin-top: 0;
-		}
-		.copy-line button {
-			flex-shrink: 0;
-			padding: 5px 10px;
-		}
-		pre {
-			padding: 18px;
-			border-radius: 9px;
-			background: #f5f6fa;
-			overflow-x: auto;
-			font:
-				13px/1.7 ui-monospace,
-				monospace;
-		}
-		.key-note {
-			margin: 20px 0 0;
-			padding-top: 18px;
-			border-top: 1px solid #dce1eb;
-		}
-		details {
-			margin-top: 16px;
-		}
-		summary {
-			cursor: pointer;
-			color: #315ac8;
-		}
-		@media (prefers-color-scheme: dark) {
-			:root {
-				background: #121923;
-				color: #e0e6f2;
-			}
-			.card {
-				background: #1a2432;
-				border-color: #394458;
-			}
-			.keys {
-				background: #121923;
-			}
-			pre {
-				background: #121923;
-			}
-			.key-note {
-				border-color: #394458;
-			}
-			summary {
-				color: #9bb6ff;
-			}
-			p,
-			small,
-			footer {
-				color: #a0aec3;
-			}
-			a,
-			button.secondary {
-				color: #9bb6ff;
-			}
-		}
-	</style>
-	<main>
-		<nav>
-			<a href="/workspace/dashboard" target="_blank" rel="noopener noreferrer">调用统计 ↗</a
-			><a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a
-			><a href="/workspace/logs" target="_blank" rel="noopener noreferrer">请求记录 ↗</a>
-		</nav>
-		<div class="bar">
-			<div>
-				<h1>LAN API 网关</h1>
-				<p>账号池与额度恢复 · <span id="zone"></span></p>
-			</div>
-			<span class="badge">真实余额：未知</span>
-		</div>
-		<section class="card" aria-labelledby="client-config-title" data-testid="ltsp-client-config">
-			<div class="bar">
-				<h2 id="client-config-title">客户端接入</h2>
-				<span class="badge" id="access-status">正在读取鉴权状态…</span>
-			</div>
-			<p>把客户端的 API 地址指向本网关，并填写下面的接入 Key。只填写地址或使用 dummy-api-key 将无法调用。</p>
-			<label for="downstream-key">客户端接入 Key</label>
-			<div class="copy-line" id="access-controls">
-				<input id="downstream-key" type="password" readonly autocomplete="off" placeholder="正在读取…" /><button
-					type="button"
-					class="secondary"
-					id="show-access"
-				>
-					显示</button
-				><button type="button" class="secondary" data-copy="downstream-key" disabled>复制 Key</button
-				><button type="button" id="rotate-access" disabled>生成并轮换</button>
-			</div>
-			<p id="access-message" role="status" aria-live="polite"></p>
-			<small>轮换后旧 Key 立即失效，请同步更新客户端。示例默认隐藏 Key，复制配置时会自动填入当前有效值。</small>
-			<details>
-				<summary>手动设置新的接入 Key</summary>
-				<label for="custom-access">新 Key（sk-bf- 开头，32–256 个字母、数字、连字符或下划线）</label
-				><input id="custom-access" type="password" autocomplete="new-password" placeholder="sk-bf-…" />
-				<div class="actions">
-					<button type="button" id="save-access" disabled>保存并替换旧 Key</button>
-				</div>
-			</details>
-			<div class="connection-grid">
-				<div>
-					<strong>OpenAI 兼容客户端</strong>
-					<div class="copy-line">
-						<code id="openai-url"></code><button type="button" class="secondary" data-copy="openai-url">复制地址</button>
-					</div>
-					<pre id="openai-example"></pre>
-					<button type="button" class="secondary" data-copy="openai-example">复制 Python 配置</button>
-				</div>
-				<div>
-					<strong>Anthropic 客户端</strong>
-					<div class="copy-line">
-						<code id="anthropic-url"></code><button type="button" class="secondary" data-copy="anthropic-url">复制地址</button>
-					</div>
-					<pre id="anthropic-example"></pre>
-					<button type="button" class="secondary" data-copy="anthropic-example">复制 Python 配置</button>
-				</div>
-			</div>
-			<p class="key-note">
-				这里管理的是网关接入 Key，与厂商凭据分别维护。真实的 OpenAI / Anthropic key 在
-				<a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a>
-				中录入和替换。
-			</p>
-			<details>
-				<summary>高级接入设置与管理边界</summary>
-				<p>
-					Bifrost 的
-					<a href="/workspace/governance/virtual-keys" target="_blank" rel="noopener noreferrer">Virtual Keys ↗</a>
-					可管理更多接入密钥。推理鉴权在
-					<a href="/workspace/config" target="_blank" rel="noopener noreferrer">设置 ↗</a>
-					中单独配置。管理页仍向可信 LAN 免登录开放；能访问管理 API 的程序也能管理接入 Key，此处用于防止只凭 base URL 的误调用。
-				</p>
-			</details>
-			<small>示例只创建客户端。发起调用时，选择已录入 key 有权使用的模型 ID。以上管理链接均在新标签页打开。</small>
-		</section>
-		<h2>上游账号</h2>
-		<p>
-			先在
-			<a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a>
-			录入密钥，再把同一个上游账号／组织的 key 归入同组。<br />刷新日及前后一天允许真实请求重试，失败后逐步延长回避时间。日期本身不会恢复账号。
-		</p>
-		<div class="bar">
-			<div id="message" role="status" aria-live="polite"></div>
-			<div class="actions">
-				<button id="add" data-testid="ltsp-account-add" class="secondary" disabled>添加账号组</button
-				><button id="save" data-testid="ltsp-account-save" disabled>保存配置</button>
-			</div>
-		</div>
-		<div id="accounts"></div>
-		<footer>
-			“已到账，立即重试”会立即发送一次普通 API 调用，产生少量用量并记入统计。每个账号需配置其支持的探测模型；已手动禁用的 key
-			不会被启用。代理固定使用本机网段的 VNP gateway client。
-		</footer>
-	</main>
-	<script>
-		let state = { accounts: [], keys: {} };
-		const $ = (s) => document.querySelector(s);
-		const origin = window.location.origin;
-		let accessKey = null,
-			accessVisible = false,
-			accessEnforced = false;
-		const copyValues = {};
-		$("#openai-url").textContent = origin + "/openai";
-		$("#anthropic-url").textContent = origin + "/anthropic";
-		function accessMessage(text, error = false) {
-			$("#access-message").textContent = text;
-			$("#access-message").style.color = error ? "#a52e3e" : "";
-		}
-		function renderAccess() {
-			const value = accessKey?.value || "";
-			$("#downstream-key").value = value;
-			$("#downstream-key").type = accessVisible ? "text" : "password";
-			$("#show-access").textContent = accessVisible ? "隐藏" : "显示";
-			$("#access-status").textContent = accessEnforced ? "下游鉴权已启用" : "下游鉴权未启用";
-			$("#rotate-access").textContent = accessKey ? "生成并轮换" : "创建接入 Key";
-			$("#rotate-access").disabled = false;
-			$("#save-access").disabled = !accessKey;
-			copyValues["downstream-key"] = value;
-			for (const [provider, klass] of [
-				["openai", "OpenAI"],
-				["anthropic", "Anthropic"],
-			]) {
-				const example = (key) =>
-					`from ${provider} import ${klass}\n\nclient = ${klass}(\n    base_url="${origin}/${provider}",\n    api_key="${key}",\n)`;
-				copyValues[provider + "-example"] = example(value);
-				$("#" + provider + "-example").textContent = example(accessVisible && value ? value : "••••••（复制配置会填入当前 Key）");
-			}
-			for (const id of ["downstream-key", "openai-example", "anthropic-example"])
-				document.querySelector(`[data-copy="${id}"]`).disabled = !value || accessKey?.is_active === false;
-		}
-		async function loadAccess() {
-			const [auth, keys] = await Promise.all([
-				api("/api/session/is-auth-enabled"),
-				api("/api/governance/virtual-keys?search=" + encodeURIComponent(state.access_key_name)),
-			]);
-			accessEnforced = auth.inference_auth_enforced === true;
-			accessKey = (keys.virtual_keys || []).find((key) => key.name === state.access_key_name) || null;
-			renderAccess();
-			if (!accessEnforced) accessMessage("下游鉴权当前未启用，请在设置中启用。", true);
-			else if (!accessKey) accessMessage("尚无接入 Key，请点击“创建接入 Key”。");
-		}
-		async function changeAccess(value) {
-			const controls = [$("#rotate-access"), $("#save-access")];
-			controls.forEach((button) => (button.disabled = true));
-			try {
-				if (!accessKey) {
-					await api("/api/governance/virtual-keys", "POST", {
-						name: state.access_key_name,
-						allow_all_providers: true,
-						is_active: true,
-						disable_content_logging: true,
-					});
-				} else {
-					await api(
-						"/api/governance/virtual-keys/" + encodeURIComponent(accessKey.id) + "/rotate",
-						"POST",
-						value === undefined ? {} : { value },
-					);
-				}
-				await loadAccess();
-				$("#custom-access").value = "";
-				accessMessage("接入 Key 已更新。请复制新配置到客户端，旧 Key 已失效。");
-			} catch (error) {
-				accessMessage(error.message, true);
-			} finally {
-				controls.forEach((button) => (button.disabled = false));
-			}
-		}
-		$("#show-access").onclick = () => {
-			accessVisible = !accessVisible;
-			renderAccess();
-		};
-		$("#rotate-access").onclick = () => changeAccess();
-		$("#save-access").onclick = () => {
-			const value = $("#custom-access").value;
-			if (!/^sk-bf-[A-Za-z0-9_-]{26,250}$/.test(value)) {
-				accessMessage("新 Key 必须以 sk-bf- 开头，共 32–256 个 URL 安全字符。", true);
-				return;
-			}
-			if (value === accessKey?.value) {
-				accessMessage("新 Key 与当前值相同。", true);
-				return;
-			}
-			changeAccess(value);
-		};
-		for (const button of document.querySelectorAll("[data-copy]"))
-			button.onclick = async () => {
-				const source = document.getElementById(button.dataset.copy);
-				if (Object.hasOwn(copyValues, source.id)) {
-					try {
-						await loadAccess();
-					} catch (error) {
-						accessMessage(error.message, true);
-						return;
-					}
-				}
-				const text = copyValues[source.id] ?? source.textContent;
-				let copied = false;
-				if (window.isSecureContext && navigator.clipboard) {
-					try {
-						await navigator.clipboard.writeText(text);
-						copied = true;
-					} catch {}
-				}
-				if (!copied) {
-					const input = document.createElement("textarea");
-					input.value = text;
-					input.readOnly = true;
-					input.style.cssText = "position:fixed;left:-9999px;top:0";
-					document.body.append(input);
-					input.select();
-					try {
-						copied = document.execCommand("copy");
-					} catch {}
-					input.remove();
-				}
-				const label = button.textContent;
-				if (copied) {
-					button.textContent = "已复制";
-					setTimeout(() => {
-						button.textContent = label;
-					}, 1800);
-				} else {
-					if (Object.hasOwn(copyValues, source.id)) {
-						accessVisible = true;
-						renderAccess();
-					}
-					const range = document.createRange();
-					range.selectNodeContents(source);
-					const selection = window.getSelection();
-					selection.removeAllRanges();
-					selection.addRange(range);
-					button.textContent = "已选中，请按 Ctrl+C";
-				}
-			};
-		const esc = (s) =>
-			String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-		const format = (s) => (s && !s.startsWith("0001-") ? new Date(s).toLocaleString() : "—");
-		function message(s, error = false) {
-			$("#message").textContent = s;
-			$("#message").className = error ? "error" : "";
-		}
-		async function api(path, method = "GET", body) {
-			const r = await fetch(path, {
-				method,
-				headers: { "Content-Type": "application/json" },
-				body: body === undefined ? undefined : JSON.stringify(body),
-			});
-			const v = await r.json();
-			if (!r.ok) throw Error(v.error || `HTTP ${r.status}`);
-			return v;
-		}
-		function collect() {
-			for (const c of document.querySelectorAll(".card[data-id]")) {
-				const a = state.accounts.find((a) => a.id === c.dataset.id);
-				for (const field of ["name", "provider", "refresh_date", "cycle", "probe_model"])
-					a[field] = c.querySelector(`[name=${field}]`).value;
-				a.key_ids = Array.from(c.querySelectorAll("[name=key]:checked"), (x) => x.value);
-			}
-		}
-		function render() {
-			$("#zone").textContent = state.timezone || "";
-			$("#accounts").innerHTML = state.accounts.length
-				? ""
-				: '<div class="card empty">暂无账号组。录入 API key 后，添加账号组以启用额度耗尽暂停与恢复。</div>';
-			for (const a of state.accounts) {
-				const c = document.createElement("section");
-				c.className = "card";
-				c.dataset.id = a.id;
-				c.innerHTML = `<div class="bar"><strong>${esc(a.name || "新账号组")}</strong><span class="status ${a.exhausted ? "hold" : "ok"}">${a.busy ? "正在探测…" : a.exhausted ? "余额不足，已暂停" : "可参与转发"}</span></div><div class="grid"><label>账号名称<input name="name" maxlength="200" value="${esc(a.name)}"></label><label>上游<select name="provider"><option value="openai" ${a.provider === "openai" ? "selected" : ""}>OpenAI</option><option value="anthropic" ${a.provider === "anthropic" ? "selected" : ""}>Anthropic</option></select></label><label>刷新日期<input name="refresh_date" type="date" value="${esc(a.refresh_date)}"></label><label>周期<select name="cycle"><option value="monthly" ${a.cycle === "monthly" ? "selected" : ""}>每月</option><option value="annual" ${a.cycle === "annual" ? "selected" : ""}>每年</option></select></label><label>探测模型<input name="probe_model" placeholder="填写该账号可用的模型 ID" value="${esc(a.probe_model)}"></label></div><div class="keys"><strong>该账号的 API keys</strong>${(state.keys[a.provider] || []).map((k) => `<label><input type="checkbox" name="key" value="${esc(k.id)}" ${(a.key_ids || []).includes(k.id) ? "checked" : ""}>${esc(k.name || k.id)} ${k.enabled ? "" : "（已手动禁用）"}</label>`).join("") || "<p>该上游尚无已录入的 API key。</p>"}</div><small>最近探测：${esc(format(a.last_checked))} · 下次允许重试：${esc(format(a.next_retry))}<br>${esc(a.last_result || "尚未探测；此状态不代表余额已查询。")}</small><div class="actions"><button class="probe" ${a.busy ? "disabled" : ""}>已到账，立即重试</button><button class="remove danger" ${a.busy ? "disabled" : ""}>删除账号组</button></div>`;
-				if ((a.key_ids || []).length) {
-					const stats = document.createElement("a");
-					stats.textContent = "查看该账号调用统计";
-					stats.href = "/workspace/dashboard?selected_key_ids=" + encodeURIComponent(a.key_ids.join(","));
-					stats.target = "_blank";
-					stats.rel = "noopener noreferrer";
-					c.querySelector(".actions").prepend(stats);
-				}
-				c.querySelector("[name=provider]").onchange = () => {
-					collect();
-					a.key_ids = [];
-					render();
-				};
-				c.querySelector(".remove").onclick = () => {
-					collect();
-					state.accounts = state.accounts.filter((v) => v.id !== a.id);
-					render();
-					message("删除将在保存后生效。");
-				};
-				c.querySelector(".probe").onclick = async () => {
-					collect();
-					const b = c.querySelector(".probe");
-					b.disabled = true;
-					b.textContent = "正在探测…";
-					message("正在保存配置并立即探测…");
-					try {
-						state = await api("/api/ltsp/accounts", "PUT", { accounts: state.accounts });
-						const r = await api("/api/ltsp/accounts/" + encodeURIComponent(a.id) + "/probe", "POST", {});
-						state = await api("/api/ltsp/accounts");
-						render();
-						message(r.result, !r.recovered);
-					} catch (e) {
-						message(e.message, true);
-						b.disabled = false;
-						b.textContent = "已到账，立即重试";
-					}
-				};
-				$("#accounts").append(c);
-			}
-		}
-		$("#add").onclick = () => {
-			collect();
-			state.accounts.push({
-				id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2),
-				name: "",
-				provider: "openai",
-				key_ids: [],
-				refresh_date: new Date().toLocaleDateString("en-CA"),
-				cycle: "monthly",
-				probe_model: "",
-			});
-			render();
-		};
-		$("#save").onclick = async () => {
-			collect();
-			$("#save").disabled = true;
-			try {
-				state = await api("/api/ltsp/accounts", "PUT", { accounts: state.accounts });
-				render();
-				message("配置已保存。");
-			} catch (e) {
-				message(e.message, true);
-			} finally {
-				$("#save").disabled = false;
-				loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
-			}
-		};
-		api("/api/ltsp/accounts")
-			.then((v) => {
-				state = v;
-				render();
-				$("#add").disabled = false;
-				$("#save").disabled = false;
-				loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
-			})
-			.catch((e) => message("配置读取失败，请刷新页面重试：" + e.message, true));
-	</script>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>API 账号 · LTSP 网关</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font:
+        15px/1.6 system-ui,
+        sans-serif;
+      background: #f5f6fa;
+      color: #182438;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+    }
+    main {
+      max-width: 1280px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+    nav {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    a {
+      color: #315ac8;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 24px 0 4px;
+    }
+    p {
+      color: #56647a;
+    }
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .card {
+      background: white;
+      border: 1px solid #dce1eb;
+      border-radius: 14px;
+      padding: 24px;
+      margin: 20px 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 18px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+    }
+    input,
+    select,
+    button {
+      font: inherit;
+      border: 1px solid #c5cedd;
+      border-radius: 7px;
+      padding: 9px 11px;
+    }
+    input,
+    select {
+      display: block;
+      width: 100%;
+      margin-top: 5px;
+      background: transparent;
+      color: inherit;
+    }
+    button {
+      cursor: pointer;
+      background: #315ac8;
+      color: white;
+      border-color: #315ac8;
+    }
+    button.secondary {
+      background: transparent;
+      color: #315ac8;
+    }
+    button.danger {
+      background: transparent;
+      color: #a52e3e;
+      border-color: #a52e3e;
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: 0.55;
+    }
+    .keys {
+      margin: 18px 0;
+      padding: 12px;
+      background: #f5f6fa;
+      border-radius: 8px;
+    }
+    .keys label {
+      font-weight: 400;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .keys input {
+      width: auto;
+      margin: 0;
+    }
+    .status {
+      font-weight: 600;
+    }
+    .hold {
+      color: #a65516;
+    }
+    .ok {
+      color: #267847;
+    }
+    small {
+      color: #64748b;
+    }
+    #message {
+      white-space: pre-wrap;
+      min-height: 24px;
+    }
+    #message.error,
+    #access-message.error {
+      color: #a52e3e;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .empty {
+      padding: 40px;
+      text-align: center;
+    }
+    .badge {
+      border: 1px solid #dce1eb;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+    footer {
+      margin: 28px 0;
+      color: #64748b;
+      font-size: 13px;
+    }
+    h2 {
+      margin: 0;
+      font-size: 21px;
+    }
+    .connection-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 20px;
+      margin-top: 18px;
+    }
+    .copy-line {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .copy-line code {
+      flex: 1;
+      overflow-wrap: anywhere;
+    }
+    #access-controls {
+      flex-wrap: wrap;
+    }
+    #downstream-key {
+      flex: 1 1 240px;
+      min-width: 0;
+      margin-top: 0;
+    }
+    .copy-line button {
+      flex-shrink: 0;
+      padding: 5px 10px;
+    }
+    pre {
+      padding: 18px;
+      border-radius: 9px;
+      background: #f5f6fa;
+      overflow-x: auto;
+      font:
+        13px/1.7 ui-monospace,
+        monospace;
+    }
+    .key-note {
+      margin: 20px 0 0;
+      padding-top: 18px;
+      border-top: 1px solid #dce1eb;
+    }
+    details {
+      margin-top: 16px;
+    }
+    summary {
+      cursor: pointer;
+      color: #315ac8;
+    }
+    .table-scroll {
+      overflow-x: auto;
+      margin: 18px 0 32px;
+      border: 1px solid #dce1eb;
+      border-radius: 12px;
+      background: white;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    th,
+    td {
+      padding: 14px;
+      border-bottom: 1px solid #dce1eb;
+      vertical-align: top;
+    }
+    th {
+      background: #f5f6fa;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    tr:last-child td {
+      border-bottom: 0;
+    }
+    td input,
+    td select {
+      min-width: 120px;
+      margin: 0 0 8px;
+    }
+    td .actions {
+      margin: 0;
+      gap: 8px;
+    }
+    td button {
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+    td small {
+      display: block;
+      font-size: 12px;
+    }
+    .group-table {
+      min-width: 1040px;
+    }
+    .group-table td:first-child {
+      min-width: 170px;
+    }
+    .group-table td:nth-child(5) {
+      min-width: 250px;
+    }
+    .key-table,
+    .provider-table {
+      min-width: 750px;
+    }
+    .key-table code {
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .provider-table input[name="timezone"] {
+      min-width: 220px;
+    }
+    .provider-table input[name="probe_model"] {
+      min-width: 260px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .table-scroll {
+        background: #1a2432;
+        border-color: #394458;
+      }
+      th {
+        background: #121923;
+      }
+      th,
+      td {
+        border-color: #394458;
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        background: #121923;
+        color: #e0e6f2;
+      }
+      .card {
+        background: #1a2432;
+        border-color: #394458;
+      }
+      .keys {
+        background: #121923;
+      }
+      pre {
+        background: #121923;
+      }
+      .key-note {
+        border-color: #394458;
+      }
+      summary {
+        color: #9bb6ff;
+      }
+      p,
+      small,
+      footer {
+        color: #a0aec3;
+      }
+      a,
+      button.secondary {
+        color: #9bb6ff;
+      }
+    }
+  </style>
+  <main>
+    <nav>
+      <a href="/workspace/dashboard" target="_blank" rel="noopener noreferrer">调用统计 ↗</a
+      ><a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a
+      ><a href="/workspace/logs" target="_blank" rel="noopener noreferrer">请求记录 ↗</a>
+    </nav>
+    <div class="bar">
+      <div>
+        <h1>LAN API 网关</h1>
+        <p>账号归组、调用统计与额度恢复</p>
+      </div>
+    </div>
+    <section class="card" aria-labelledby="client-config-title" data-testid="ltsp-client-config">
+      <div class="bar">
+        <h2 id="client-config-title">客户端接入</h2>
+        <span class="badge" id="access-status">正在读取鉴权状态…</span>
+      </div>
+      <p>
+        把客户端的 API 地址指向本网关，并填写下面的接入 Key。只填写地址或使用 dummy-api-key
+        将无法调用。
+      </p>
+      <label for="downstream-key">客户端接入 Key</label>
+      <div class="copy-line" id="access-controls">
+        <input
+          id="downstream-key"
+          type="password"
+          readonly
+          autocomplete="off"
+          placeholder="正在读取…"
+        /><button type="button" class="secondary" id="show-access">显示</button
+        ><button type="button" class="secondary" data-copy="downstream-key" disabled>
+          复制 Key</button
+        ><button type="button" id="rotate-access" disabled>生成并轮换</button>
+      </div>
+      <p id="access-message" role="status" aria-live="polite"></p>
+      <small
+        >轮换后旧 Key 立即失效，请同步更新客户端。示例默认隐藏
+        Key，复制配置时会自动填入当前有效值。</small
+      >
+      <details>
+        <summary>手动设置新的接入 Key</summary>
+        <label for="custom-access">新 Key（sk-bf- 开头，32–256 个字母、数字、连字符或下划线）</label
+        ><input
+          id="custom-access"
+          type="password"
+          autocomplete="new-password"
+          placeholder="sk-bf-…"
+        />
+        <div class="actions">
+          <button type="button" id="save-access" disabled>保存并替换旧 Key</button>
+        </div>
+      </details>
+      <div class="connection-grid">
+        <div>
+          <strong>OpenAI 兼容客户端</strong>
+          <div class="copy-line">
+            <code id="openai-url"></code
+            ><button type="button" class="secondary" data-copy="openai-url">复制地址</button>
+          </div>
+          <pre id="openai-example"></pre>
+          <button type="button" class="secondary" data-copy="openai-example">
+            复制 Python 配置
+          </button>
+        </div>
+        <div>
+          <strong>Anthropic 客户端</strong>
+          <div class="copy-line">
+            <code id="anthropic-url"></code
+            ><button type="button" class="secondary" data-copy="anthropic-url">复制地址</button>
+          </div>
+          <pre id="anthropic-example"></pre>
+          <button type="button" class="secondary" data-copy="anthropic-example">
+            复制 Python 配置
+          </button>
+        </div>
+      </div>
+      <p class="key-note">
+        这里管理的是网关接入 Key，与厂商凭据分别维护。真实的 OpenAI / Anthropic key 在
+        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a>
+        中录入和替换。
+      </p>
+      <details>
+        <summary>高级接入设置与管理边界</summary>
+        <p>
+          Bifrost 的
+          <a href="/workspace/governance/virtual-keys" target="_blank" rel="noopener noreferrer"
+            >Virtual Keys ↗</a
+          >
+          可管理更多接入密钥。推理鉴权在
+          <a href="/workspace/config" target="_blank" rel="noopener noreferrer">设置 ↗</a>
+          中单独配置。管理页仍向可信 LAN 免登录开放；能访问管理 API 的程序也能管理接入
+          Key，此处用于防止只凭 base URL 的误调用。
+        </p>
+      </details>
+      <small
+        >示例只创建客户端。发起调用时，选择已录入 key 有权使用的模型
+        ID。以上管理链接均在新标签页打开。</small
+      >
+    </section>
+    <div class="bar">
+      <div id="message" role="status" aria-live="polite"></div>
+      <div class="actions">
+        <button id="add" data-testid="ltsp-account-add" class="secondary" disabled>
+          添加账号组</button
+        ><button id="save" data-testid="ltsp-account-save" disabled>保存配置</button>
+      </div>
+    </div>
+    <section aria-labelledby="groups-title">
+      <h2 id="groups-title">账号组</h2>
+      <p>
+        把共用同一额度的账号归为一组。刷新日期按上游配置中的时区解读；余额、暂停与恢复以组为单位。
+      </p>
+      <div id="accounts" class="table-scroll">
+        <table class="group-table" aria-label="账号组">
+          <thead>
+            <tr>
+              <th>账号组名称</th>
+              <th>上游</th>
+              <th>刷新日期／周期</th>
+              <th>真实余额</th>
+              <th>状态与重试</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="groups-empty">
+              <td colspan="6" class="empty">
+                暂无账号组。点击“添加账号组”，再到下方账号表关联账号。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section aria-labelledby="keys-title">
+      <div class="bar">
+        <h2 id="keys-title">Bifrost 账号</h2>
+        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer"
+          >录入／管理 API key ↗</a
+        >
+      </div>
+      <p>
+        每行对应 Bifrost 中的一条 API key。选择同一上游的账号组；留空表示不归组，按原生账号池转发。
+      </p>
+      <div id="key-assignments" class="table-scroll">
+        <table class="key-table" aria-label="Bifrost 账号">
+          <thead>
+            <tr>
+              <th>账号／API key 名称</th>
+              <th>上游</th>
+              <th>状态</th>
+              <th>所属账号组（留空可不关联）</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="keys-empty">
+              <td colspan="4" class="empty">尚无 Bifrost 账号，请先录入 API key。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section aria-labelledby="providers-title">
+      <h2 id="providers-title">上游配置</h2>
+      <p>
+        时区与刷新截止时间一起确定重试起点。默认 UTC 20:00；从账号组刷新日期当天的截止时间起允许重试
+        48 小时，失败仍逐步退避。
+      </p>
+      <div id="provider-settings" class="table-scroll">
+        <table class="provider-table" aria-label="上游配置">
+          <thead>
+            <tr>
+              <th>上游</th>
+              <th>时区（IANA）</th>
+              <th>刷新截止时间</th>
+              <th>探测模型</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <datalist id="timezones">
+        <option value="UTC"></option>
+        <option value="Asia/Shanghai"></option>
+        <option value="America/Los_Angeles"></option>
+        <option value="America/New_York"></option>
+        <option value="Europe/London"></option>
+      </datalist>
+      <small
+        >探测模型留空时，从 catalog
+        随机选择该组账号可用的文本模型，成功后填入并保存。已配置模型明确不支持时也会重新选择；余额、认证、限流及网络错误直接反馈。</small
+      >
+    </section>
+    <footer>
+      “已到账，立即重试”会当场调用上游，产生少量用量并记入统计。仅模型明确不支持时才换下一个候选模型，整次操作最多
+      45 秒。
+      成功才解除暂停；修改日期不会清除失败回避。已手动禁用的账号不会被启用。代理固定使用本机网段的
+      VNP gateway client。
+    </footer>
+  </main>
+  <template id="group-row"
+    ><tr>
+      <td>
+        <input aria-label="账号组名称" name="name" maxlength="200" /><small
+          class="key-count"
+        ></small>
+      </td>
+      <td>
+        <select aria-label="账号组上游" name="provider">
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option></select
+        ><small class="provider-hint">先清空账号关联，再改上游</small>
+      </td>
+      <td>
+        <input aria-label="刷新日期" name="refresh_date" type="date" /><select
+          aria-label="刷新周期"
+          name="cycle"
+        >
+          <option value="monthly">每月</option>
+          <option value="annual">每年</option></select
+        ><small class="refresh-zone"></small>
+      </td>
+      <td class="balance"></td>
+      <td>
+        <span class="status"></span
+        ><small
+          ><span class="retry-window" style="white-space: pre-line"></span><br /><span
+            class="next-retry"
+          ></span
+          ><br /><span class="last-checked"></span><br /><span class="last-result"></span
+        ></small>
+      </td>
+      <td>
+        <div class="actions">
+          <a class="stats" target="_blank" rel="noopener noreferrer">查看该组调用统计 ↗</a
+          ><button class="probe">已到账，立即重试</button
+          ><button class="remove danger">删除账号组</button>
+        </div>
+      </td>
+    </tr></template
+  >
+  <template id="key-row"
+    ><tr>
+      <td>
+        <span class="key-name"></span><small><code class="key-id"></code></small>
+      </td>
+      <td class="provider-name"></td>
+      <td class="key-status"></td>
+      <td>
+        <select>
+          <option value=""></option>
+        </select>
+      </td></tr
+  ></template>
+  <template id="provider-row"
+    ><tr>
+      <td class="provider-name"></td>
+      <td><input name="timezone" list="timezones" required /></td>
+      <td><input name="cutoff" type="time" required /></td>
+      <td>
+        <input name="probe_model" maxlength="200" placeholder="留空：自动选择并记住" />
+      </td></tr
+  ></template>
+  <textarea
+    id="copy-buffer"
+    readonly
+    aria-hidden="true"
+    tabindex="-1"
+    style="position: fixed; left: -9999px; top: 0"
+  ></textarea>
+  <script>
+    let state = { accounts: [], keys: {}, provider_schedules: [] };
+    const $ = (s) => document.querySelector(s);
+    function setText(element, value) {
+      const text = String(value);
+      if (!element.firstChild) element.append(document.createTextNode(text));
+      else if (element.firstChild.data !== text) element.firstChild.data = text;
+    }
+    function setProp(element, property, value) {
+      if (element[property] !== value) element[property] = value;
+    }
+    function setAttr(element, attribute, value) {
+      if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
+    }
+    const origin = window.location.origin;
+    let accessKey = null,
+      accessVisible = false,
+      accessEnforced = false;
+    const copyValues = {};
+    setText($("#openai-url"), origin + "/openai");
+    setText($("#anthropic-url"), origin + "/anthropic");
+    function accessMessage(text, error = false) {
+      setText($("#access-message"), text);
+      setProp($("#access-message"), "className", error ? "error" : "");
+    }
+    function renderAccess() {
+      const value = accessKey?.value || "";
+      setProp($("#downstream-key"), "value", value);
+      setProp($("#downstream-key"), "type", accessVisible ? "text" : "password");
+      setText($("#show-access"), accessVisible ? "隐藏" : "显示");
+      setText($("#access-status"), accessEnforced ? "下游鉴权已启用" : "下游鉴权未启用");
+      setText($("#rotate-access"), accessKey ? "生成并轮换" : "创建接入 Key");
+      setProp($("#rotate-access"), "disabled", false);
+      setProp($("#save-access"), "disabled", !accessKey);
+      copyValues["downstream-key"] = value;
+      for (const [provider, klass] of [
+        ["openai", "OpenAI"],
+        ["anthropic", "Anthropic"],
+      ]) {
+        const example = (key) =>
+          `from ${provider} import ${klass}\n\nclient = ${klass}(\n    base_url="${origin}/${provider}",\n    api_key="${key}",\n)`;
+        copyValues[provider + "-example"] = example(value);
+        setText(
+          $("#" + provider + "-example"),
+          example(accessVisible && value ? value : "••••••（复制配置会填入当前 Key）"),
+        );
+      }
+      for (const id of ["downstream-key", "openai-example", "anthropic-example"])
+        setProp(
+          document.querySelector(`[data-copy="${id}"]`),
+          "disabled",
+          !value || accessKey?.is_active === false,
+        );
+    }
+    async function loadAccess() {
+      const [auth, keys] = await Promise.all([
+        api("/api/session/is-auth-enabled"),
+        api("/api/governance/virtual-keys?search=" + encodeURIComponent(state.access_key_name)),
+      ]);
+      accessEnforced = auth.inference_auth_enforced === true;
+      accessKey =
+        (keys.virtual_keys || []).find((key) => key.name === state.access_key_name) || null;
+      renderAccess();
+      if (!accessEnforced) accessMessage("下游鉴权当前未启用，请在设置中启用。", true);
+      else if (!accessKey) accessMessage("尚无接入 Key，请点击“创建接入 Key”。");
+    }
+    async function changeAccess(value) {
+      const controls = [$("#rotate-access"), $("#save-access")];
+      controls.forEach((button) => setProp(button, "disabled", true));
+      try {
+        if (!accessKey) {
+          await api("/api/governance/virtual-keys", "POST", {
+            name: state.access_key_name,
+            allow_all_providers: true,
+            is_active: true,
+            disable_content_logging: true,
+          });
+        } else {
+          await api(
+            "/api/governance/virtual-keys/" + encodeURIComponent(accessKey.id) + "/rotate",
+            "POST",
+            value === undefined ? {} : { value },
+          );
+        }
+        await loadAccess();
+        if (value !== undefined && $("#custom-access").value === value)
+          setProp($("#custom-access"), "value", "");
+        accessMessage("接入 Key 已更新。请复制新配置到客户端，旧 Key 已失效。");
+      } catch (error) {
+        accessMessage(error.message, true);
+      } finally {
+        setProp($("#rotate-access"), "disabled", false);
+        setProp($("#save-access"), "disabled", !accessKey);
+      }
+    }
+    $("#show-access").onclick = () => {
+      accessVisible = !accessVisible;
+      renderAccess();
+    };
+    $("#rotate-access").onclick = () => changeAccess();
+    $("#save-access").onclick = () => {
+      const value = $("#custom-access").value;
+      if (!/^sk-bf-[A-Za-z0-9_-]{26,250}$/.test(value)) {
+        accessMessage("新 Key 必须以 sk-bf- 开头，共 32–256 个 URL 安全字符。", true);
+        return;
+      }
+      if (value === accessKey?.value) {
+        accessMessage("新 Key 与当前值相同。", true);
+        return;
+      }
+      changeAccess(value);
+    };
+    for (const button of document.querySelectorAll("[data-copy]"))
+      button.onclick = async () => {
+        const source = document.getElementById(button.dataset.copy);
+        if (Object.hasOwn(copyValues, source.id)) {
+          try {
+            await loadAccess();
+          } catch (error) {
+            accessMessage(error.message, true);
+            return;
+          }
+        }
+        const text = copyValues[source.id] ?? source.textContent;
+        let copied = false;
+        if (window.isSecureContext && navigator.clipboard) {
+          try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+          } catch {}
+        }
+        if (!copied) {
+          const input = $("#copy-buffer");
+          const previousFocus = document.activeElement;
+          setProp(input, "value", text);
+          input.select();
+          try {
+            copied = document.execCommand("copy");
+          } catch {}
+          setProp(input, "value", "");
+          if (previousFocus !== document.activeElement)
+            previousFocus?.focus({ preventScroll: true });
+        }
+        const label = button.dataset.copyLabel || button.textContent;
+        if (!button.dataset.copyLabel) button.dataset.copyLabel = label;
+        if (copied) {
+          setText(button, "已复制");
+          setTimeout(() => {
+            setText(button, label);
+          }, 1800);
+        } else {
+          if (Object.hasOwn(copyValues, source.id)) {
+            accessVisible = true;
+            renderAccess();
+          }
+          const range = document.createRange();
+          range.selectNodeContents(source);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          setText(button, "已选中，请按 Ctrl+C");
+        }
+      };
+    const providerName = (p) => ({ openai: "OpenAI", anthropic: "Anthropic" })[p] || p;
+    const format = (s, zone) => {
+      if (!s || s.startsWith("0001-")) return "—";
+      try {
+        return new Date(s).toLocaleString("zh-CN", {
+          timeZone: zone,
+          timeZoneName: "short",
+          hour12: false,
+        });
+      } catch {
+        return "时区待校验";
+      }
+    };
+    let policyBusy = false;
+    function message(s, error = false) {
+      setText($("#message"), s);
+      setProp($("#message"), "className", error ? "error" : "");
+    }
+    async function api(path, method = "GET", body) {
+      const r = await fetch(path, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const v = await r.json();
+      if (!r.ok) throw Error(v.error || `HTTP ${r.status}`);
+      return v;
+    }
+    function collect() {
+      for (const row of document.querySelectorAll("#accounts tr[data-id]")) {
+        const group = state.accounts.find((a) => a.id === row.dataset.id);
+        for (const field of ["name", "provider", "refresh_date", "cycle"])
+          group[field] = row.querySelector(`[name=${field}]`).value;
+      }
+      for (const row of document.querySelectorAll("#provider-settings tr[data-provider]")) {
+        const settings = state.provider_schedules.find((s) => s.provider === row.dataset.provider);
+        for (const field of ["timezone", "cutoff", "probe_model"])
+          settings[field] = row.querySelector(`[name=${field}]`).value;
+      }
+    }
+    function payload() {
+      return {
+        accounts: state.accounts.map(({ id, name, provider, key_ids, refresh_date, cycle }) => ({
+          id,
+          name,
+          provider,
+          key_ids,
+          refresh_date,
+          cycle,
+        })),
+        provider_schedules: state.provider_schedules,
+      };
+    }
+    function rowFrom(template) {
+      return $(template).content.firstElementChild.cloneNode(true);
+    }
+    function updateGroups() {
+      const body = $("#accounts tbody");
+      const remaining = new Map(
+        [...body.querySelectorAll("tr[data-id]")].map((row) => [row.dataset.id, row]),
+      );
+      setProp($("#groups-empty"), "hidden", state.accounts.length > 0);
+      for (const group of state.accounts) {
+        const id = group.id;
+        let row = remaining.get(id);
+        remaining.delete(id);
+        if (!row) {
+          row = rowFrom("#group-row");
+          row.dataset.id = id;
+          for (const field of ["name", "provider", "refresh_date", "cycle"])
+            row.querySelector(`[name=${field}]`).onchange = () => {
+              collect();
+              const current = state.accounts.find((a) => a.id === id);
+              if (field !== "name") delete current.retry_start;
+              render();
+              message("有未保存的配置。");
+            };
+          row.querySelector(".remove").onclick = () => {
+            collect();
+            state.accounts = state.accounts.filter((a) => a.id !== id);
+            render();
+            message("删除及其账号解除关联将在保存后生效，上游 API key 保留。");
+          };
+          row.querySelector(".probe").onclick = async () => {
+            collect();
+            policyBusy = true;
+            state.accounts.find((a) => a.id === id).busy = true;
+            render();
+            message("正在保存配置并立即探测…");
+            try {
+              state = await api("/api/ltsp/accounts", "PUT", payload());
+              const result = await api(
+                "/api/ltsp/accounts/" + encodeURIComponent(id) + "/probe",
+                "POST",
+                {},
+              );
+              state = await api("/api/ltsp/accounts");
+              message(result.result, !result.recovered);
+            } catch (error) {
+              message(error.message, true);
+            } finally {
+              const current = state.accounts.find((a) => a.id === id);
+              if (current) current.busy = false;
+              policyBusy = false;
+              render();
+            }
+          };
+          body.append(row);
+        }
+        const settings = state.provider_schedules.find((s) => s.provider === group.provider);
+        const zone = settings?.timezone || "UTC";
+        const count = (group.key_ids || []).length;
+        for (const field of ["name", "provider", "refresh_date", "cycle"]) {
+          const input = row.querySelector(`[name=${field}]`);
+          setProp(input, "value", group[field] || "");
+          setProp(input, "disabled", policyBusy || (field === "provider" && count > 0));
+        }
+        setText(row.querySelector(".key-count"), `${count} 个关联账号`);
+        setProp(row.querySelector(".provider-hint"), "hidden", !count);
+        setText(row.querySelector(".refresh-zone"), `${zone} · ${settings?.cutoff || ""} 截止`);
+        setText(
+          row.querySelector(".balance"),
+          group.balance !== undefined && group.balance !== null && group.balance !== "unknown"
+            ? group.balance
+            : "未知",
+        );
+        const active = (state.keys[group.provider] || []).some(
+          (k) => (group.key_ids || []).includes(k.id) && k.enabled,
+        );
+        setText(
+          row.querySelector(".status"),
+          group.busy
+            ? "正在探测…"
+            : group.exhausted
+              ? "余额不足，已暂停"
+              : active
+                ? "可参与转发"
+                : count
+                  ? "无启用账号"
+                  : "未关联账号",
+        );
+        setProp(
+          row.querySelector(".status"),
+          "className",
+          "status " + (group.exhausted ? "hold" : "ok"),
+        );
+        setText(
+          row.querySelector(".retry-window"),
+          group.retry_start
+            ? `已保存的重试窗口：\n${format(group.retry_start, zone)}\n至 ${format(group.retry_end, zone)}`
+            : "保存后显示准确重试窗口",
+        );
+        setText(row.querySelector(".next-retry"), "失败回避至：" + format(group.next_retry, zone));
+        setText(
+          row.querySelector(".last-checked"),
+          "最近探测：" + format(group.last_checked, zone),
+        );
+        setText(
+          row.querySelector(".last-result"),
+          group.last_result || "尚未探测；未查询真实余额。",
+        );
+        setText(row.querySelector(".probe"), group.busy ? "正在探测…" : "已到账，立即重试");
+        for (const button of row.querySelectorAll("button"))
+          setProp(button, "disabled", policyBusy || !!group.busy);
+        const stats = row.querySelector(".stats");
+        setProp(stats, "hidden", !count);
+        setAttr(
+          stats,
+          "href",
+          "/workspace/dashboard?selected_key_ids=" +
+            encodeURIComponent((group.key_ids || []).join(",")),
+        );
+      }
+      for (const row of remaining.values()) row.remove();
+    }
+    function updateGroupChoices(select, groups, selected) {
+      const remaining = new Map(
+        [...select.options]
+          .filter((option) => option.value)
+          .map((option) => [option.value, option]),
+      );
+      for (const group of groups) {
+        let option = remaining.get(group.id);
+        remaining.delete(group.id);
+        if (!option) {
+          option = document.createElement("option");
+          option.value = group.id;
+          select.append(option);
+        }
+        setText(option, group.name || "未命名账号组");
+      }
+      for (const option of remaining.values()) option.remove();
+      setProp(select, "value", selected);
+    }
+    function updateKeys() {
+      const body = $("#key-assignments tbody");
+      const remaining = new Map(
+        [...body.querySelectorAll("tr[data-key-id]")].map((row) => [
+          row.dataset.provider + ":" + row.dataset.keyId,
+          row,
+        ]),
+      );
+      let count = 0;
+      for (const provider of ["openai", "anthropic"]) {
+        const keys = [...(state.keys[provider] || [])];
+        for (const group of state.accounts.filter((a) => a.provider === provider))
+          for (const id of group.key_ids || []) {
+            if (!keys.some((k) => k.id === id))
+              keys.push({
+                id,
+                name: "已从 Bifrost 删除的账号",
+                enabled: false,
+                missing: true,
+              });
+          }
+        for (const key of keys) {
+          count++;
+          const identity = provider + ":" + key.id;
+          let row = remaining.get(identity);
+          remaining.delete(identity);
+          if (!row) {
+            row = rowFrom("#key-row");
+            row.dataset.provider = provider;
+            row.dataset.keyId = key.id;
+            row.querySelector("select").onchange = (event) => {
+              collect();
+              for (const group of state.accounts.filter((a) => a.provider === provider))
+                group.key_ids = (group.key_ids || []).filter((id) => id !== key.id);
+              const chosen = state.accounts.find(
+                (a) => a.id === event.target.value && a.provider === provider,
+              );
+              if (chosen) chosen.key_ids.push(key.id);
+              render();
+              message("账号关联将在保存后生效。");
+            };
+            body.append(row);
+          }
+          const owner = state.accounts.find(
+            (a) => a.provider === provider && (a.key_ids || []).includes(key.id),
+          );
+          setText(row.querySelector(".key-name"), key.name || key.id);
+          setText(row.querySelector(".key-id"), key.id);
+          setText(row.querySelector(".provider-name"), providerName(provider));
+          setText(
+            row.querySelector(".key-status"),
+            key.missing ? "已删除，可解除关联" : key.enabled ? "已启用" : "已手动禁用",
+          );
+          const select = row.querySelector("select");
+          setAttr(select, "aria-label", "所属账号组：" + (key.name || key.id));
+          updateGroupChoices(
+            select,
+            state.accounts.filter(
+              (a) => a.provider === provider && (!key.missing || a.id === owner?.id),
+            ),
+            owner?.id || "",
+          );
+          setProp(select, "disabled", policyBusy);
+        }
+      }
+      for (const row of remaining.values()) row.remove();
+      setProp($("#keys-empty"), "hidden", count > 0);
+    }
+    function updateProviders() {
+      const body = $("#provider-settings tbody");
+      const remaining = new Map(
+        [...body.querySelectorAll("tr[data-provider]")].map((row) => [row.dataset.provider, row]),
+      );
+      for (const settings of state.provider_schedules) {
+        const provider = settings.provider;
+        let row = remaining.get(provider);
+        remaining.delete(provider);
+        if (!row) {
+          row = rowFrom("#provider-row");
+          row.dataset.provider = provider;
+          setText(row.querySelector(".provider-name"), providerName(provider));
+          for (const [field, label] of [
+            ["timezone", "时区"],
+            ["cutoff", "刷新截止时间"],
+            ["probe_model", "探测模型"],
+          ]) {
+            const input = row.querySelector(`[name=${field}]`);
+            setAttr(input, "aria-label", providerName(provider) + " " + label);
+            input.onchange = () => {
+              collect();
+              if (field !== "probe_model")
+                for (const group of state.accounts.filter((a) => a.provider === provider))
+                  delete group.retry_start;
+              render();
+              message("有未保存的上游配置。");
+            };
+          }
+          body.append(row);
+        }
+        for (const field of ["timezone", "cutoff", "probe_model"]) {
+          const input = row.querySelector(`[name=${field}]`);
+          setProp(input, "value", settings[field] || "");
+          setProp(input, "disabled", policyBusy);
+        }
+      }
+      for (const row of remaining.values()) row.remove();
+    }
+    function render() {
+      setProp($("#add"), "disabled", policyBusy);
+      setProp($("#save"), "disabled", policyBusy);
+      updateGroups();
+      updateKeys();
+      updateProviders();
+    }
+    function lockPolicy() {
+      render();
+    }
+    $("#add").onclick = () => {
+      collect();
+      state.accounts.push({
+        id: crypto.randomUUID
+          ? crypto.randomUUID()
+          : Date.now().toString(36) + Math.random().toString(36).slice(2),
+        name: "",
+        provider: "openai",
+        key_ids: [],
+        refresh_date: new Date().toLocaleDateString("en-CA"),
+        cycle: "monthly",
+      });
+      render();
+    };
+    $("#save").onclick = async () => {
+      collect();
+      policyBusy = true;
+      lockPolicy();
+      try {
+        state = await api("/api/ltsp/accounts", "PUT", payload());
+        message("配置已保存。");
+      } catch (e) {
+        message(e.message, true);
+      } finally {
+        policyBusy = false;
+        render();
+        loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
+      }
+    };
+    api("/api/ltsp/accounts")
+      .then((v) => {
+        state = v;
+        render();
+        loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
+      })
+      .catch((e) => message("配置读取失败，请刷新页面重试：" + e.message, true));
+  </script>
 </html>

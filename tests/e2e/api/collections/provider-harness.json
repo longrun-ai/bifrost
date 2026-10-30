@@ -276955,6 +276955,82 @@
           ]
         }
       ]
+    },
+    {
+      "name": "LTSP upstream cutoff and group models",
+      "description": "LTSP mode: provider timezone/cutoff/probe model and per-group balances. Read-only and missing-group requests consume no provider credits. Local tests/ltspgateway.py covers actual catalog discovery, unsupported-model replacement and restart persistence against isolated upstreams.",
+      "item": [
+        {
+          "name": "LTSP OpenAI Anthropic upstream config and group balances",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/ltsp/accounts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Provider cutoff/model and group balances have one owner', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.equal(200);",
+                  "  var v = pm.response.json();",
+                  "  pm.expect(v).not.to.have.property('balance');",
+                  "  pm.expect(v.provider_schedules).to.have.lengthOf(2);",
+                  "  v.provider_schedules.forEach(function (s) {",
+                  "    pm.expect(s.provider).to.be.oneOf(['openai','anthropic']);",
+                  "    pm.expect(s.timezone).to.be.a('string').and.not.empty;",
+                  "    pm.expect(s.cutoff).to.match(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);",
+                  "    pm.expect(s.probe_model).to.be.a('string');",
+                  "    pm.expect(s).not.to.have.property('start'); pm.expect(s).not.to.have.property('end');",
+                  "  });",
+                  "  v.accounts.forEach(function (g) {",
+                  "    pm.expect(g.balance).to.equal('unknown');",
+                  "    pm.expect(g).not.to.have.property('probe_model');",
+                  "    pm.expect(Date.parse(g.retry_end)-Date.parse(g.retry_start)).to.equal(48*60*60*1000);",
+                  "  });",
+                  "  Object.keys(v.keys).forEach(function (p) { v.keys[p].forEach(function (k) { pm.expect(k).not.to.have.property('value'); }); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LTSP OpenAI Anthropic missing group probe [EXPECT-409]",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/ltsp/accounts/ltsp-harness-nonexistent-{{$guid}}/probe"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Missing group cannot start a catalog sweep', function () { pm.expect(pm.response.code,pm.response.text()).to.equal(409); pm.expect(pm.response.json().error).to.equal('账号不存在'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

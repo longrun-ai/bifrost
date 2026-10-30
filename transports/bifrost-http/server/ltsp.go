@@ -19,15 +19,7 @@ func (s *BifrostHTTPServer) initLTSP() error {
 	if path == "" {
 		return nil
 	}
-	zone := time.Local
-	if name := os.Getenv("LTSP_GATEWAY_TIMEZONE"); name != "" {
-		var err error
-		zone, err = time.LoadLocation(name)
-		if err != nil {
-			return err
-		}
-	}
-	m, err := ltsp.Open(path, zone)
+	m, err := ltsp.Open(path)
 	if err != nil {
 		return err
 	}
@@ -42,8 +34,22 @@ func (s *BifrostHTTPServer) initLTSP() error {
 		}
 		return c.Keys
 	}
+	m.Models = func(provider string) []string {
+		catalog := s.Config.GetModelCatalog()
+		if catalog == nil {
+			return nil
+		}
+		models := []string{}
+		for _, model := range catalog.GetModelsForProvider(schemas.ModelProvider(provider)) {
+			entry := catalog.GetModelCapabilityEntryForModel(model, schemas.ModelProvider(provider))
+			if entry == nil || entry.Mode == "chat" || entry.Mode == "responses" {
+				models = append(models, model)
+			}
+		}
+		return models
+	}
 	probeClient := &http.Client{Timeout: 44 * time.Second, Transport: &http.Transport{Proxy: nil}}
-	m.Probe = func(ctx context.Context, a ltsp.Account, id string) *schemas.BifrostError {
+	m.Probe = func(ctx context.Context, a ltsp.Account, id, model string) *schemas.BifrostError {
 		fail := func(message string) *schemas.BifrostError {
 			return &schemas.BifrostError{IsBifrostError: true, Type: schemas.Ptr(schemas.ProviderConnectionFailed), Error: &schemas.ErrorField{Message: message}}
 		}
@@ -71,10 +77,10 @@ func (s *BifrostHTTPServer) initLTSP() error {
 			return fail("gateway access key is missing or inactive")
 		}
 		path := "/v1/chat/completions"
-		body := map[string]any{"model": a.Provider + "/" + a.ProbeModel, "messages": []any{map[string]any{"role": "user", "content": "Reply OK."}}, "max_completion_tokens": 16}
+		body := map[string]any{"model": a.Provider + "/" + model, "messages": []any{map[string]any{"role": "user", "content": "Reply OK."}}, "max_completion_tokens": 16}
 		if a.Provider == "openai" {
 			path = "/v1/responses"
-			body = map[string]any{"model": "openai/" + a.ProbeModel, "input": "Reply OK.", "max_output_tokens": 128}
+			body = map[string]any{"model": "openai/" + model, "input": "Reply OK.", "max_output_tokens": 128}
 		}
 		raw, _ := json.Marshal(body)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, origin+path, bytes.NewReader(raw))

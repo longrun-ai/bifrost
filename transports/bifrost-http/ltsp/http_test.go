@@ -2,6 +2,7 @@ package ltsp
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -63,6 +64,37 @@ func TestAccountAPIOnlyReturnsKeyReferences(t *testing.T) {
 	b := string(ctx.Response.Body())
 	if strings.Contains(b, "never-expose-this-secret") || !strings.Contains(b, `"balance":"unknown"`) {
 		t.Fatal(b)
+	}
+	var v map[string]json.RawMessage
+	if err := json.Unmarshal(ctx.Response.Body(), &v); err != nil {
+		t.Fatal(err)
+	}
+	if _, global := v["balance"]; global {
+		t.Fatal("balance still belongs to the gateway instead of a group")
+	}
+	if !strings.Contains(string(v["provider_schedules"]), `"cutoff":"20:00"`) {
+		t.Fatal("required provider defaults missing")
+	}
+}
+
+func TestAccountAPIPreventsCrossProviderAssignment(t *testing.T) {
+	m := manager(t)
+	m.Keys = func(p string) []schemas.Key { return []schemas.Key{{ID: p + "-key", Name: p}} }
+	a := m.Snapshot()
+	a[0].KeyIDs = []string{"anthropic-key"}
+	b, err := json.Marshal(diskState{Accounts: a, ProviderSchedules: m.Schedules()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req fasthttp.RequestCtx
+	req.Request.Header.SetContentType("application/json")
+	req.Request.SetBody(b)
+	m.put(&req)
+	if req.Response.StatusCode() != 400 {
+		t.Fatal("cross-provider assignment accepted")
+	}
+	if m.Snapshot()[0].KeyIDs[0] != "k1" {
+		t.Fatal("rejected assignment changed policy")
 	}
 }
 

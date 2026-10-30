@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -127,7 +128,29 @@ func (m *Manager) get(ctx *fasthttp.RequestCtx) {
 			}
 		}
 	}
-	reply(ctx, 200, map[string]any{"accounts": m.Snapshot(), "keys": keys, "timezone": m.zone.String(), "balance": "unknown", "access_key_name": AccessKeyName})
+	type groupView struct {
+		Account
+		Balance    string    `json:"balance"`
+		RetryStart time.Time `json:"retry_start"`
+		RetryEnd   time.Time `json:"retry_end"`
+	}
+	m.mu.Lock()
+	groups := make([]groupView, 0, len(m.accounts))
+	now := m.clock()
+	for _, a := range m.accounts {
+		a.KeyIDs = append([]string{}, a.KeyIDs...)
+		a.Busy = m.busy[a.ID]
+		v := groupView{Account: a, Balance: "unknown"}
+		for _, s := range m.schedules {
+			if s.Provider == a.Provider {
+				v.RetryStart, v.RetryEnd = RetryWindow(a.RefreshDate, a.Cycle, now, s)
+			}
+		}
+		groups = append(groups, v)
+	}
+	schedules := append([]ProviderSchedule(nil), m.schedules...)
+	m.mu.Unlock()
+	reply(ctx, 200, map[string]any{"accounts": groups, "keys": keys, "provider_schedules": schedules, "access_key_name": AccessKeyName})
 }
 
 func (m *Manager) put(ctx *fasthttp.RequestCtx) {
@@ -143,7 +166,23 @@ func (m *Manager) put(ctx *fasthttp.RequestCtx) {
 		reply(ctx, 400, map[string]string{"error": "无效 JSON"})
 		return
 	}
-	if e := m.Replace(s.Accounts); e != nil {
+	if m.Keys != nil {
+		owners := map[string]string{}
+		for _, p := range []string{"openai", "anthropic"} {
+			for _, k := range m.Keys(p) {
+				owners[k.ID] = p
+			}
+		}
+		for _, a := range s.Accounts {
+			for _, id := range a.KeyIDs {
+				if owner, known := owners[id]; known && owner != a.Provider {
+					reply(ctx, 400, map[string]string{"error": "Bifrost 账号与账号组须属于同一上游"})
+					return
+				}
+			}
+		}
+	}
+	if e := m.Replace(s.Accounts, s.ProviderSchedules); e != nil {
 		reply(ctx, 400, map[string]string{"error": e.Error()})
 		return
 	}

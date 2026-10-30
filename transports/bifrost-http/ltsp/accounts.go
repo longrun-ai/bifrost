@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,6 @@ type Account struct {
 	KeyIDs      []string  `json:"key_ids"`
 	RefreshDate string    `json:"refresh_date"`
 	Cycle       string    `json:"cycle"`
-	ProbeModel  string    `json:"probe_model"`
 	Exhausted   bool      `json:"exhausted"`
 	Failures    int       `json:"failures"`
 	NextRetry   time.Time `json:"next_retry"`
@@ -33,8 +33,61 @@ type Account struct {
 }
 
 type diskState struct {
-	Accounts []Account `json:"accounts"`
+	Accounts          []Account          `json:"accounts"`
+	ProviderSchedules []ProviderSchedule `json:"provider_schedules"`
 }
+
+// ProviderSchedule is shared by all groups using the same upstream. Parsed
+// timezone data is retained per configured provider, never per request.
+type ProviderSchedule struct {
+	Provider     string `json:"provider"`
+	Timezone     string `json:"timezone"`
+	Cutoff       string `json:"cutoff"`
+	ProbeModel   string `json:"probe_model"`
+	zone         *time.Location
+	cutoffMinute int
+}
+
+func defaultSchedules() []ProviderSchedule {
+	return []ProviderSchedule{
+		{Provider: "openai", Timezone: "UTC", Cutoff: "20:00"},
+		{Provider: "anthropic", Timezone: "UTC", Cutoff: "20:00"},
+	}
+}
+
+func validateSchedules(schedules []ProviderSchedule) ([]ProviderSchedule, error) {
+	if len(schedules) != 2 {
+		return nil, errors.New("须配置 OpenAI 和 Anthropic 的时区与刷新截止时间")
+	}
+	result := append([]ProviderSchedule(nil), schedules...)
+	seen := map[string]bool{}
+	for i := range result {
+		s := &result[i]
+		if (s.Provider != "openai" && s.Provider != "anthropic") || seen[s.Provider] {
+			return nil, errors.New("上游配置缺失或重复")
+		}
+		seen[s.Provider] = true
+		s.ProbeModel = strings.TrimPrefix(strings.TrimSpace(s.ProbeModel), s.Provider+"/")
+		if len(s.ProbeModel) > 200 || strings.ContainsAny(s.ProbeModel, "\r\n") {
+			return nil, errors.New("探测模型无效")
+		}
+		if s.Timezone == "" || s.Timezone == "Local" {
+			return nil, errors.New("请指定 IANA 时区，例如 UTC 或 America/Los_Angeles")
+		}
+		var err error
+		s.zone, err = time.LoadLocation(s.Timezone)
+		if err != nil {
+			return nil, errors.New("无效时区：" + s.Timezone)
+		}
+		t, err := time.Parse("15:04", s.Cutoff)
+		if err != nil || t.Format("15:04") != s.Cutoff {
+			return nil, errors.New("刷新截止时间须为 HH:mm")
+		}
+		s.cutoffMinute = t.Hour()*60 + t.Minute()
+	}
+	return result, nil
+}
+
 type probeKey struct{}
 type probeIdentity struct{ AccountID, KeyID string }
 type recoveryKey struct{}
@@ -42,19 +95,21 @@ type recoveryKey struct{}
 type Manager struct {
 	mu          sync.Mutex
 	path        string
-	zone        *time.Location
 	accounts    []Account
+	schedules   []ProviderSchedule
 	busy        map[string]bool
 	probeTokens map[string]probeIdentity
 	clock       func() time.Time
 	// Keys is read from Bifrost's own live configuration; credentials are never saved here.
 	Keys         func(string) []schemas.Key
-	Probe        func(context.Context, Account, string) *schemas.BifrostError
+	Models       func(string) []string
+	Probe        func(context.Context, Account, string, string) *schemas.BifrostError
 	AccountsPage []byte
 }
 
-func Open(path string, zone *time.Location) (*Manager, error) {
-	m := &Manager{path: path, zone: zone, busy: map[string]bool{}, probeTokens: map[string]probeIdentity{}, clock: time.Now}
+func Open(path string) (*Manager, error) {
+	m := &Manager{path: path, busy: map[string]bool{}, probeTokens: map[string]probeIdentity{}, clock: time.Now}
+	m.schedules, _ = validateSchedules(defaultSchedules())
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return m, nil
@@ -70,6 +125,12 @@ func Open(path string, zone *time.Location) (*Manager, error) {
 		return nil, err
 	}
 	m.accounts = s.Accounts
+	if s.ProviderSchedules != nil {
+		m.schedules, err = validateSchedules(s.ProviderSchedules)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return m, nil
 }
 
@@ -89,13 +150,10 @@ func validate(accounts []Account) error {
 		if _, err := time.Parse("2006-01-02", a.RefreshDate); err != nil {
 			return errors.New("刷新日期须为 YYYY-MM-DD")
 		}
-		if len(a.ProbeModel) > 200 || strings.ContainsAny(a.ProbeModel, "\r\n") {
-			return errors.New("探测模型无效")
-		}
 		for _, id := range a.KeyIDs {
 			k := a.Provider + ":" + id
 			if id == "" || keys[k] {
-				return errors.New("每个 API key 只能属于一个上游账号")
+				return errors.New("每个 Bifrost 账号只能关联一个同上游账号组")
 			}
 			keys[k] = true
 		}
@@ -104,7 +162,7 @@ func validate(accounts []Account) error {
 }
 
 func (m *Manager) saveLocked() error {
-	b, err := json.MarshalIndent(diskState{Accounts: m.accounts}, "", "  ")
+	b, err := json.MarshalIndent(diskState{Accounts: m.accounts, ProviderSchedules: m.schedules}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -149,14 +207,24 @@ func (m *Manager) Snapshot() []Account {
 	return r
 }
 
+func (m *Manager) Schedules() []ProviderSchedule {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]ProviderSchedule(nil), m.schedules...)
+}
+
 // Replace edits policy only. UI clients cannot clear an exhaustion hold or its backoff.
-func (m *Manager) Replace(accounts []Account) error {
+func (m *Manager) Replace(accounts []Account, schedules []ProviderSchedule) error {
 	if err := validate(accounts); err != nil {
+		return err
+	}
+	next, err := validateSchedules(schedules)
+	if err != nil {
 		return err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	old := m.accounts
+	old, oldSchedules := m.accounts, m.schedules
 	byID := map[string]Account{}
 	for _, a := range old {
 		byID[a.ID] = a
@@ -193,22 +261,32 @@ func (m *Manager) Replace(accounts []Account) error {
 		}
 	}
 	m.accounts = accounts
+	m.schedules = next
 	if err := m.saveLocked(); err != nil {
 		m.accounts = old
+		m.schedules = oldSchedules
 		return err
 	}
 	return nil
 }
 
-// Window checks calendar dates in the gateway timezone. Monthly 29/30/31 clamps
-// within each month without drifting the original anchor; leap years behave likewise.
-func Window(date, cycle string, now time.Time, zone *time.Location) bool {
+// RetryWindow returns the current or next window: 48 elapsed hours starting at
+// the upstream's local refresh cutoff. Monthly anchors clamp to
+// the month's last day without drifting; timezone rules include DST changes.
+func RetryWindow(date, cycle string, now time.Time, schedule ProviderSchedule) (time.Time, time.Time) {
+	zone := schedule.zone
+	if zone == nil {
+		return time.Time{}, time.Time{}
+	}
 	anchor, err := time.ParseInLocation("2006-01-02", date, zone)
 	if err != nil {
-		return false
+		return time.Time{}, time.Time{}
 	}
 	t := now.In(zone)
-	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, zone)
+	if t.Before(anchor) {
+		t = anchor
+	}
+	var nextStart, nextEnd time.Time
 	for delta := -1; delta <= 1; delta++ {
 		var y int
 		var mo time.Month
@@ -222,11 +300,19 @@ func Window(date, cycle string, now time.Time, zone *time.Location) bool {
 		last := time.Date(y, mo+1, 0, 0, 0, 0, 0, zone).Day()
 		d := min(anchor.Day(), last)
 		refresh := time.Date(y, mo, d, 0, 0, 0, 0, zone)
-		if !refresh.Before(anchor) && !day.Before(refresh.AddDate(0, 0, -1)) && !day.After(refresh.AddDate(0, 0, 1)) {
-			return true
+		if refresh.Before(anchor) {
+			continue
+		}
+		start := time.Date(y, mo, d, schedule.cutoffMinute/60, schedule.cutoffMinute%60, 0, 0, zone)
+		end := start.Add(48 * time.Hour)
+		if !now.Before(start) && now.Before(end) {
+			return start, end
+		}
+		if now.Before(start) && (nextStart.IsZero() || start.Before(nextStart)) {
+			nextStart, nextEnd = start, end
 		}
 	}
-	return false
+	return nextStart, nextEnd
 }
 
 func (m *Manager) findLocked(provider string, keyID string) *Account {
@@ -244,7 +330,19 @@ func (m *Manager) findLocked(provider string, keyID string) *Account {
 }
 
 func (m *Manager) allowedLocked(a *Account, now time.Time) bool {
-	return a == nil || !a.Exhausted || (!m.busy[a.ID] && !now.Before(a.NextRetry) && Window(a.RefreshDate, a.Cycle, now, m.zone))
+	if a == nil || !a.Exhausted {
+		return true
+	}
+	if m.busy[a.ID] || now.Before(a.NextRetry) {
+		return false
+	}
+	for _, s := range m.schedules {
+		if s.Provider == a.Provider {
+			start, end := RetryWindow(a.RefreshDate, a.Cycle, now, s)
+			return !start.IsZero() && !now.Before(start) && now.Before(end)
+		}
+	}
+	return false
 }
 
 // Begin is called at the actual provider-attempt boundary, including pinned keys.
@@ -386,27 +484,54 @@ func (m *Manager) ProbeNow(ctx context.Context, id string) (Account, error) {
 		m.mu.Unlock()
 		return a, errors.New("该账号已有恢复探测正在进行")
 	}
-	if a.ProbeModel == "" {
-		m.mu.Unlock()
-		return a, errors.New("请先设置该账号支持的探测模型")
+	preferred := ""
+	for _, s := range m.schedules {
+		if s.Provider == a.Provider {
+			preferred = s.ProbeModel
+		}
 	}
-	keyID := ""
+	models := []string{}
+	if m.Models != nil {
+		models = append(models, m.Models(a.Provider)...)
+	}
+	rand.Shuffle(len(models), func(i, j int) { models[i], models[j] = models[j], models[i] })
+	if preferred != "" {
+		models = append([]string{preferred}, models...)
+	}
+	type candidate struct{ model, keyID string }
+	candidates := []candidate{}
+	seen := map[string]bool{}
 	if m.Keys != nil {
-		for _, k := range m.Keys(a.Provider) {
-			for _, id := range a.KeyIDs {
-				if k.ID == id && (k.Enabled == nil || *k.Enabled) && k.Models.IsAllowed(a.ProbeModel) && !k.BlacklistedModels.IsBlocked(a.ProbeModel) {
-					keyID = k.ID
+		keys := m.Keys(a.Provider)
+		for _, model := range models {
+			model = strings.TrimPrefix(model, a.Provider+"/")
+			if model == "" || seen[model] {
+				continue
+			}
+			seen[model] = true
+			foundKey := ""
+			for _, k := range keys {
+				if k.Enabled != nil && !*k.Enabled || !k.Models.IsAllowed(model) || k.BlacklistedModels.IsBlocked(model) {
+					continue
+				}
+				for _, id := range a.KeyIDs {
+					if k.ID == id {
+						foundKey = k.ID
+						break
+					}
+				}
+				if foundKey != "" {
 					break
 				}
 			}
-			if keyID != "" {
-				break
+			if foundKey != "" {
+				candidates = append(candidates, candidate{model, foundKey})
 			}
 		}
 	}
-	if keyID == "" {
+	if len(candidates) == 0 {
 		m.mu.Unlock()
-		return a, errors.New("该账号没有已启用且支持探测模型的 key")
+		return a, errors.New("账号组没有已启用且支持候选模型的账号；请检查 catalog、模型配置与账号关联")
 	}
 	if m.Probe == nil {
 		m.mu.Unlock()
@@ -414,18 +539,75 @@ func (m *Manager) ProbeNow(ctx context.Context, id string) (Account, error) {
 	}
 	m.busy[id] = true
 	m.mu.Unlock()
-	// Bounded ordinary inference; no timer or downstream traffic is required.
-	probeCtx, cancel := context.WithTimeout(context.WithValue(ctx, probeKey{}, probeIdentity{id, keyID}), 45*time.Second)
+	// One bounded button operation. Only explicit model incompatibility advances
+	// to another catalog candidate; billing/auth/network errors stop immediately.
+	probeCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	e := m.Probe(probeCtx, a, keyID)
+	var e *schemas.BifrostError
+	model := ""
+	for _, c := range candidates {
+		model = c.model
+		if probeCtx.Err() != nil {
+			e = &schemas.BifrostError{IsBifrostError: true, Type: schemas.Ptr(schemas.RequestTimedOut), Error: &schemas.ErrorField{Message: "probe timed out"}}
+			break
+		}
+		e = m.Probe(context.WithValue(probeCtx, probeKey{}, probeIdentity{id, c.keyID}), a, c.keyID, c.model)
+		if e == nil || CreditError(a.Provider, e) || !UnsupportedModel(e) {
+			break
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.busy, id)
 	for i := range m.accounts {
 		if m.accounts[i].ID == id {
+			if e == nil {
+				for j := range m.schedules {
+					if m.schedules[j].Provider == a.Provider {
+						m.schedules[j].ProbeModel = model
+					}
+				}
+			}
 			err := m.finishLocked(&m.accounts[i], e)
 			return m.accounts[i], err
 		}
 	}
 	return a, errors.New("账号已删除")
+}
+
+func UnsupportedModel(e *schemas.BifrostError) bool {
+	if e == nil || e.Error == nil {
+		return false
+	}
+	if e.StatusCode != nil && (*e.StatusCode == 401 || *e.StatusCode == 429 || *e.StatusCode >= 500) {
+		return false
+	}
+	for _, v := range []*string{e.Type, e.Error.Type, e.Error.Code} {
+		if v != nil && (*v == "authentication_error" || *v == "permission_error" || *v == "invalid_api_key") {
+			return false
+		}
+	}
+	message := strings.ToLower(e.Error.Message)
+	if param, ok := e.Error.Param.(string); ok && param != "" {
+		if param != "model" {
+			return false
+		}
+		if strings.Contains(message, "not supported") || strings.Contains(message, "unsupported") || strings.Contains(message, "not available") {
+			return true
+		}
+	}
+	for _, v := range []*string{e.Type, e.Error.Type, e.Error.Code} {
+		if v == nil {
+			continue
+		}
+		switch *v {
+		case "model_not_found", "unsupported_model", "model_not_supported", "policy_model_blocked", "no_key_supports_model":
+			return true
+		case "not_found_error":
+			if strings.Contains(strings.ToLower(e.Error.Message), "model") {
+				return true
+			}
+		}
+	}
+	return strings.Contains(message, "model") && (strings.Contains(message, "does not exist") || strings.Contains(message, "model not found") || strings.Contains(message, "model is not supported") || strings.Contains(message, "not a valid model") || strings.Contains(message, "does not support this model"))
 }

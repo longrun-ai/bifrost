@@ -13,15 +13,16 @@ import (
 
 func manager(t *testing.T) *Manager {
 	t.Helper()
-	m, e := Open(filepath.Join(t.TempDir(), "accounts.json"), time.UTC)
+	m, e := Open(filepath.Join(t.TempDir(), "accounts.json"))
 	if e != nil {
 		t.Fatal(e)
 	}
-	m.clock = func() time.Time { return time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC) }
-	if e = m.Replace([]Account{{ID: "one", Name: "Account", Provider: "openai", KeyIDs: []string{"k1", "k2"}, RefreshDate: "2026-10-29", Cycle: "monthly", ProbeModel: "test-model"}}); e != nil {
+	m.clock = func() time.Time { return time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC) }
+	if e = m.Replace([]Account{{ID: "one", Name: "Account", Provider: "openai", KeyIDs: []string{"k1", "k2"}, RefreshDate: "2026-10-29", Cycle: "monthly"}}, m.Schedules()); e != nil {
 		t.Fatal(e)
 	}
 	m.Keys = func(string) []schemas.Key { return []schemas.Key{{ID: "k1", Models: schemas.WhiteList{"*"}}} }
+	m.Models = func(string) []string { return []string{"test-model"} }
 	return m
 }
 func quota() *schemas.BifrostError {
@@ -32,7 +33,7 @@ func ctx() *schemas.BifrostContext {
 }
 
 func BenchmarkAccountAttempt(b *testing.B) {
-	m := &Manager{zone: time.UTC, clock: time.Now, accounts: []Account{{ID: "a", Provider: "openai", KeyIDs: []string{"k"}}}}
+	m := &Manager{clock: time.Now, accounts: []Account{{ID: "a", Provider: "openai", KeyIDs: []string{"k"}}}}
 	c := ctx()
 	key := schemas.Key{ID: "k"}
 	b.ReportAllocs()
@@ -43,17 +44,38 @@ func BenchmarkAccountAttempt(b *testing.B) {
 }
 
 func TestWindowCalendar(t *testing.T) {
-	z, _ := time.LoadLocation("America/Los_Angeles")
 	for _, c := range []struct {
-		anchor, cycle, day string
-		want               bool
+		anchor, cycle, zone, instant string
+		want                         bool
 	}{
-		{"2026-10-29", "monthly", "2026-10-27", false}, {"2026-10-29", "monthly", "2026-10-28", true}, {"2026-10-29", "monthly", "2026-10-30", true}, {"2026-10-29", "monthly", "2026-10-31", false},
-		{"2026-01-31", "monthly", "2026-03-01", true}, {"2026-01-31", "monthly", "2026-03-29", false}, {"2024-02-29", "annual", "2027-02-28", true}, {"2024-02-29", "annual", "2028-03-01", true},
-		{"2026-11-01", "monthly", "2026-10-31", true}, {"2026-11-01", "monthly", "2026-11-03", false}, {"2026-12-01", "monthly", "2026-10-31", false},
+		{"2026-10-29", "monthly", "UTC", "2026-10-29T19:59:59Z", false},
+		{"2026-10-29", "monthly", "UTC", "2026-10-29T20:00:00Z", true},
+		{"2026-10-29", "monthly", "UTC", "2026-10-31T19:59:59Z", true},
+		{"2026-10-29", "monthly", "UTC", "2026-10-31T20:00:00Z", false},
+		{"2026-10-29", "monthly", "America/Los_Angeles", "2026-10-30T02:59:59Z", false},
+		{"2026-10-29", "monthly", "America/Los_Angeles", "2026-10-30T03:00:00Z", true},
+		{"2026-03-07", "monthly", "America/Los_Angeles", "2026-03-10T03:59:59Z", true},
+		{"2026-03-07", "monthly", "America/Los_Angeles", "2026-03-10T04:00:00Z", false},
+		{"2026-10-31", "monthly", "America/Los_Angeles", "2026-11-03T02:59:59Z", true},
+		{"2026-10-31", "monthly", "America/Los_Angeles", "2026-11-03T03:00:00Z", false},
+		{"2026-01-31", "monthly", "UTC", "2026-02-28T20:00:00Z", true},
+		{"2026-01-31", "monthly", "UTC", "2026-03-30T20:00:00Z", false},
+		{"2026-01-31", "monthly", "UTC", "2026-03-31T20:00:00Z", true},
+		{"2024-02-29", "annual", "UTC", "2027-02-28T20:00:00Z", true},
+		{"2024-02-29", "annual", "UTC", "2028-02-28T20:00:00Z", false},
+		{"2025-12-31", "monthly", "UTC", "2026-01-01T12:00:00Z", true},
+		{"2026-12-01", "monthly", "UTC", "2026-10-31T20:00:00Z", false},
 	} {
-		d, _ := time.ParseInLocation("2006-01-02", c.day, z)
-		if got := Window(c.anchor, c.cycle, d, z); got != c.want {
+		s := defaultSchedules()
+		s[0].Timezone = c.zone
+		s, e := validateSchedules(s)
+		if e != nil {
+			t.Fatal(e)
+		}
+		now, _ := time.Parse(time.RFC3339, c.instant)
+		start, end := RetryWindow(c.anchor, c.cycle, now, s[0])
+		got := !now.Before(start) && now.Before(end)
+		if got != c.want || end.Sub(start) != 48*time.Hour {
 			t.Errorf("%+v: got %v", c, got)
 		}
 	}
@@ -93,10 +115,10 @@ func TestGroupBackoffPersistenceAndEdits(t *testing.T) {
 	a.Failures = 0
 	a.NextRetry = time.Time{}
 	a.RefreshDate = "2026-10-30"
-	if e := m.Replace([]Account{a}); e != nil {
+	if e := m.Replace([]Account{a}, m.Schedules()); e != nil {
 		t.Fatal(e)
 	}
-	r, e := Open(m.path, time.UTC)
+	r, e := Open(m.path)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -144,13 +166,13 @@ func TestImmediateProbeOutsideWindowAndConcurrentButton(t *testing.T) {
 	m := manager(t)
 	a := m.Snapshot()[0]
 	a.RefreshDate = "2026-10-10"
-	if e := m.Replace([]Account{a}); e != nil {
+	if e := m.Replace([]Account{a}, m.Schedules()); e != nil {
 		t.Fatal(e)
 	}
 	m.End(ctx(), "openai", schemas.Key{ID: "k1"}, quota())
 	var calls atomic.Int32
 	entered, release := make(chan struct{}), make(chan struct{})
-	m.Probe = func(c context.Context, a Account, id string) *schemas.BifrostError {
+	m.Probe = func(c context.Context, a Account, id, model string) *schemas.BifrostError {
 		calls.Add(1)
 		if id != "k1" {
 			t.Error(id)
@@ -187,8 +209,167 @@ func TestDisabledKeyIsNotReenabled(t *testing.T) {
 	m.Keys = func(string) []schemas.Key {
 		return []schemas.Key{{ID: "k1", Enabled: schemas.Ptr(false), Models: schemas.WhiteList{"*"}}}
 	}
-	m.Probe = func(context.Context, Account, string) *schemas.BifrostError { t.Fatal("disabled key used"); return nil }
+	m.Probe = func(context.Context, Account, string, string) *schemas.BifrostError {
+		t.Fatal("disabled key used")
+		return nil
+	}
 	if _, e := m.ProbeNow(context.Background(), "one"); e == nil {
 		t.Fatal("disabled key accepted")
+	}
+}
+
+func TestSchedulesAreRequiredValidatedAndPersisted(t *testing.T) {
+	m := manager(t)
+	for _, mutate := range []func([]ProviderSchedule) []ProviderSchedule{
+		func(s []ProviderSchedule) []ProviderSchedule { return nil },
+		func(s []ProviderSchedule) []ProviderSchedule { return s[:1] },
+		func(s []ProviderSchedule) []ProviderSchedule { s[0].Timezone = "Local"; return s },
+		func(s []ProviderSchedule) []ProviderSchedule { s[0].Timezone = "bad/zone"; return s },
+		func(s []ProviderSchedule) []ProviderSchedule { s[0].Cutoff = "24:00"; return s },
+		func(s []ProviderSchedule) []ProviderSchedule { s[0].Cutoff = ""; return s },
+		func(s []ProviderSchedule) []ProviderSchedule { s[0].Provider = "anthropic"; return s },
+	} {
+		if err := m.Replace(m.Snapshot(), mutate(m.Schedules())); err == nil {
+			t.Fatal("invalid schedule accepted")
+		}
+	}
+	s := m.Schedules()
+	s[0].Timezone, s[0].Cutoff, s[0].ProbeModel = "Asia/Shanghai", "21:30", "chosen-model"
+	if err := m.Replace(m.Snapshot(), s); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Open(m.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Schedules()[0]; got.Timezone != "Asia/Shanghai" || got.Cutoff != "21:30" || got.ProbeModel != "chosen-model" {
+		t.Fatal(got)
+	}
+	r.clock = func() time.Time { return time.Date(2026, 10, 29, 13, 29, 59, 0, time.UTC) }
+	r.End(ctx(), "openai", schemas.Key{ID: "k1"}, quota())
+	r.accounts[0].NextRetry = time.Time{}
+	if r.Begin(ctx(), "openai", schemas.Key{ID: "k1"}) {
+		t.Fatal("retry began before local 21:30 cutoff")
+	}
+	r.clock = func() time.Time { return time.Date(2026, 10, 29, 13, 30, 0, 0, time.UTC) }
+	if !r.Begin(ctx(), "openai", schemas.Key{ID: "k1"}) {
+		t.Fatal("retry did not begin at configured cutoff")
+	}
+}
+
+func TestProbeDiscoversRemembersAndReplacesUnsupportedModel(t *testing.T) {
+	m := manager(t)
+	m.Models = func(string) []string { return []string{"good", "other", "good"} }
+	seen := map[string]int{}
+	m.Probe = func(_ context.Context, _ Account, keyID, model string) *schemas.BifrostError {
+		seen[model]++
+		if keyID != "k1" {
+			t.Fatal("wrong account key")
+		}
+		if model == "other" || model == "retired" {
+			return &schemas.BifrostError{StatusCode: schemas.Ptr(404), Error: &schemas.ErrorField{Code: schemas.Ptr("model_not_found"), Message: "model not found"}}
+		}
+		return nil
+	}
+	if _, err := m.ProbeNow(context.Background(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	if m.Schedules()[0].ProbeModel != "good" || seen["good"] != 1 || seen["other"] > 1 {
+		t.Fatal("catalog discovery did not remember a usable unique candidate", seen)
+	}
+	r, err := Open(m.path)
+	if err != nil || r.Schedules()[0].ProbeModel != "good" {
+		t.Fatal("discovered model was not persisted", err)
+	}
+	s := m.Schedules()
+	s[0].ProbeModel = "retired"
+	if err := m.Replace(m.Snapshot(), s); err != nil {
+		t.Fatal(err)
+	}
+	clear(seen)
+	if _, err := m.ProbeNow(context.Background(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	if seen["retired"] != 1 || seen["good"] != 1 || seen["other"] > 1 || m.Schedules()[0].ProbeModel != "good" {
+		t.Fatal("unsupported preferred model was not replaced", seen)
+	}
+}
+
+func TestProbeDoesNotSearchOnBillingAuthNetworkOrRateErrors(t *testing.T) {
+	for _, e := range []*schemas.BifrostError{
+		quota(),
+		{StatusCode: schemas.Ptr(401), Error: &schemas.ErrorField{Message: "model authorization failed"}},
+		{StatusCode: schemas.Ptr(403), Error: &schemas.ErrorField{Message: "account forbidden"}},
+		{StatusCode: schemas.Ptr(429), Error: &schemas.ErrorField{Message: "rate limited"}},
+		{IsBifrostError: true, Type: schemas.Ptr(schemas.ProviderConnectionFailed), Error: &schemas.ErrorField{Message: "network failed"}},
+		{StatusCode: schemas.Ptr(400), Error: &schemas.ErrorField{Message: "max_output_tokens not supported for this model"}},
+	} {
+		m := manager(t)
+		s := m.Schedules()
+		s[0].ProbeModel = "preferred"
+		if err := m.Replace(m.Snapshot(), s); err != nil {
+			t.Fatal(err)
+		}
+		m.Models = func(string) []string { return []string{"fallback-a", "fallback-b"} }
+		calls := 0
+		m.Probe = func(context.Context, Account, string, string) *schemas.BifrostError { calls++; return e }
+		if _, err := m.ProbeNow(context.Background(), "one"); err != nil {
+			t.Fatal(err)
+		}
+		if calls != 1 || m.Schedules()[0].ProbeModel != "preferred" {
+			t.Fatal("non-model failure triggered a model sweep", calls)
+		}
+	}
+}
+
+func BenchmarkRetryWindow(b *testing.B) {
+	s, _ := validateSchedules(defaultSchedules())
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	b.ReportAllocs()
+	for b.Loop() {
+		RetryWindow("2026-10-29", "monthly", now, s[0])
+	}
+}
+
+func TestProbeTriesEachUnsupportedCatalogModelOnce(t *testing.T) {
+	m := manager(t)
+	s := m.Schedules()
+	s[0].ProbeModel = "retired"
+	if err := m.Replace(m.Snapshot(), s); err != nil {
+		t.Fatal(err)
+	}
+	m.End(ctx(), "openai", schemas.Key{ID: "k1"}, quota())
+	m.Models = func(string) []string { return []string{"retired", "missing-a", "missing-a", "missing-b"} }
+	seen := map[string]int{}
+	m.Probe = func(_ context.Context, _ Account, _ string, model string) *schemas.BifrostError {
+		seen[model]++
+		return &schemas.BifrostError{StatusCode: schemas.Ptr(404), Error: &schemas.ErrorField{Type: schemas.Ptr("not_found_error"), Message: "model: " + model}}
+	}
+	if _, err := m.ProbeNow(context.Background(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 3 || !m.Snapshot()[0].Exhausted || m.Snapshot()[0].Busy || m.Schedules()[0].ProbeModel != "retired" {
+		t.Fatal(seen)
+	}
+	for _, count := range seen {
+		if count != 1 {
+			t.Fatal("catalog model repeated", seen)
+		}
+	}
+}
+
+func TestModelParameterVerdictDoesNotHideOtherParameterErrors(t *testing.T) {
+	e := &schemas.BifrostError{StatusCode: schemas.Ptr(400), Error: &schemas.ErrorField{Code: schemas.Ptr("unsupported_value"), Param: "model", Message: "This model is not supported for Responses"}}
+	if !UnsupportedModel(e) {
+		t.Fatal("explicit unsupported model was not recognized")
+	}
+	e.Error.Param = "max_output_tokens"
+	if UnsupportedModel(e) {
+		t.Fatal("unrelated request parameter triggered a model sweep")
+	}
+	e.Error.Param = "model"
+	e.Error.Type = schemas.Ptr("permission_error")
+	if UnsupportedModel(e) {
+		t.Fatal("authentication/permission failure triggered a model sweep")
 	}
 }
