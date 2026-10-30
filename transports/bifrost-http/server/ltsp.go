@@ -53,6 +53,23 @@ func (s *BifrostHTTPServer) initLTSP() error {
 		if origin == "" || token == "" {
 			return fail("probe context is unavailable")
 		}
+		if s.Config.ConfigStore == nil {
+			return fail("gateway configuration store is unavailable")
+		}
+		virtualKeys, err := s.Config.ConfigStore.GetVirtualKeys(ctx)
+		if err != nil {
+			return fail("cannot load gateway access key for probe")
+		}
+		accessKey := ""
+		for _, key := range virtualKeys {
+			if key.Name == ltsp.AccessKeyName && key.IsActiveValue() && (key.ExpiresAt == nil || key.ExpiresAt.After(time.Now())) {
+				accessKey = key.Value.GetValue()
+				break
+			}
+		}
+		if accessKey == "" {
+			return fail("gateway access key is missing or inactive")
+		}
 		path := "/v1/chat/completions"
 		body := map[string]any{"model": a.Provider + "/" + a.ProbeModel, "messages": []any{map[string]any{"role": "user", "content": "Reply OK."}}, "max_completion_tokens": 16}
 		if a.Provider == "openai" {
@@ -69,6 +86,7 @@ func (s *BifrostHTTPServer) initLTSP() error {
 		req.Header.Set("X-BF-Session-Affinity", "off")
 		req.Header.Set("X-Stainless-Timeout", "40")
 		req.Header.Set("X-LTSP-Probe", token)
+		req.Header.Set("Authorization", "Bearer "+accessKey)
 		resp, err := probeClient.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {

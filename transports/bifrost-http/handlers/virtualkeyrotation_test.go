@@ -40,6 +40,27 @@ func newRotationTestStore(t *testing.T) *configstore.RDBConfigStore {
 	return rdb
 }
 
+func TestLTSPCustomVirtualKeyRotationUsesNativeStore(t *testing.T) {
+	store := newRotationTestStore(t)
+	ctx := context.Background()
+	old := "sk-bf-old-test-key-with-at-least-32-characters"
+	newValue := "sk-bf-new-test-key-with-at-least-32-characters"
+	require.NoError(t, store.CreateVirtualKey(ctx, &configstoreTables.TableVirtualKey{ID: "custom", Name: "custom", Value: *schemas.NewSecretVar(old), IsActive: schemas.Ptr(true)}))
+	r := NewVirtualKeyRotator(store, rotationTestGovernanceManager{store: store})
+	for _, invalid := range []string{"dummy-api-key", "sk-bf-short", "sk-bf-unsafe-test-value-with-spaces ", "sk-bf-unsafe-test-value-with-newline\n"} {
+		_, err := r.ReplaceVirtualKeyValue(ctx, "custom", invalid)
+		require.Error(t, err)
+	}
+	key, err := store.GetVirtualKey(ctx, "custom")
+	require.NoError(t, err)
+	require.Equal(t, old, key.Value.GetValue())
+	key, err = r.ReplaceVirtualKeyValue(ctx, "custom", newValue)
+	require.NoError(t, err)
+	require.Equal(t, newValue, key.Value.GetValue())
+	require.NotNil(t, key.RotatedAt)
+	require.Empty(t, key.PreviousValue.GetValue())
+}
+
 func seedRotationRefreshToken(t *testing.T, store *configstore.RDBConfigStore, id, bfMode, bfSub string) {
 	t.Helper()
 	require.NoError(t, store.DB().Create(&configstoreTables.TableOAuth2RefreshToken{

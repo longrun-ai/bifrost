@@ -218,6 +218,16 @@ def run(binary, evidence):
                 status,raw=request(url+"/api/session/is-auth-enabled")
                 auth=json.loads(raw)
                 assert status==200 and not auth.get("is_auth_enabled") and not auth.get("setup_required"),auth
+                status, raw = request(url+"/api/governance/virtual-keys", {"name":"ltsp-lan-clients","allow_all_providers":True,"is_active":True,"disable_content_logging":True})
+                assert status in (200,201),(status,raw[:300])
+                vk=json.loads(raw)["virtual_key"]
+                access=vk["value"]
+                cfg=json.loads(request(url+"/api/config")[1])["client_config"]
+                cfg["enforce_auth_on_inference"]=True
+                cfg["vk_rotation_cooldown"]="0s"
+                assert request(url+"/api/config",{"client_config":cfg},method="PUT")[0]==200
+                assert json.loads(request(url+"/api/session/is-auth-enabled")[1])["inference_auth_enforced"]
+                def auth_headers(extra=None):return {"Authorization":"Bearer "+access,**(extra or {})}
                 status, home = request(url + "/")
                 assert status == 200 and "客户端接入" in home.decode(), "root did not serve the LTSP account home"
                 assert request(url + "/ltsp/accounts")[1] == home, "home alias differs from root"
@@ -237,7 +247,7 @@ def run(binary, evidence):
                 payload = {"model": "openai/gpt-6.1-sol", "messages": [{"role": "user", "content": "fixture-sensitive-prompt-do-not-log"}]}
 
                 def inference(extra=None, body=None, path="/v1/chat/completions"):
-                    status, raw = request(url + path, body or payload, extra)
+                    status, raw = request(url + path, body or payload, auth_headers(extra))
                     assert status == 200, (status, raw[:400])
                     return raw
 
@@ -246,10 +256,13 @@ def run(binary, evidence):
                 for _ in range(4):
                     inference()
                 assert len({c["key"] for c in Upstream.calls[start:]}) == 1, "IP affinity was not honored"
-                inference({"Authorization":"Bearer unused"})
-                for placeholder in ("dummy-api-key", "arbitrary-lan-placeholder"):
-                    inference({"Authorization":"Bearer "+placeholder}, body={**payload,"model":"gpt-6.1-sol"}, path="/openai/chat/completions")
-                inference({"Authorization":"Bearer dummy-api-key"}, body={"model":"gpt-6.1-sol","input":"Hi"}, path="/openai/responses")
+                for placeholder in (None,"dummy-api-key", "sk-bf-invalid-key-with-at-least-32-characters"):
+                    before=len(Upstream.calls)
+                    headers={} if placeholder is None else {"Authorization":"Bearer "+placeholder}
+                    assert request(url+"/openai/chat/completions",{**payload,"model":"gpt-6.1-sol"},headers)[0] in (401,403)
+                    assert len(Upstream.calls)==before,"unauthorized request reached upstream"
+                inference(body={**payload,"model":"gpt-6.1-sol"},path="/openai/chat/completions")
+                inference(body={"model":"gpt-6.1-sol","input":"Hi"}, path="/openai/responses")
                 inference({"x-bf-session-id": "native-user-session"})
                 assert b'"ok"' in inference(body={**payload, "stream": True})
                 assert Proxy.connections > 0, "gateway did not use fixed proxy"
@@ -265,11 +278,11 @@ def run(binary, evidence):
                     assert response["usage"]["input_tokens_details"]["cache_write_tokens_details"]["ttl_12h_tokens"] == 5
 
                 Upstream.depleted = True
-                assert request(url + "/v1/chat/completions", payload, {"x-bf-api-key-id": ids["a1"]})[0] != 200
+                assert request(url + "/v1/chat/completions", payload, auth_headers({"x-bf-api-key-id": ids["a1"]}))[0] != 200
                 state = json.loads(request(url + "/api/ltsp/accounts")[1])
                 assert state["accounts"][0]["exhausted"]
                 before = len(Upstream.calls)
-                assert request(url + "/v1/chat/completions", payload, {"x-bf-api-key-id": ids["a2"]})[0] != 200
+                assert request(url + "/v1/chat/completions", payload, auth_headers({"x-bf-api-key-id": ids["a2"]}))[0] != 200
                 assert len(Upstream.calls) == before, "sibling key escaped account hold"
                 inference()
                 assert Upstream.calls[-1]["key"] == "fixture-b1"
@@ -287,9 +300,9 @@ def run(binary, evidence):
                 claude={"model":"anthropic/claude-test","max_completion_tokens":16,"messages":[{"role":"user","content":"Reply OK."}]}
                 inference(body=claude)
                 Upstream.depleted_anthropic=True
-                assert request(url+"/v1/chat/completions",claude,{"x-bf-api-key-id":anthropic_ids["c1"]})[0]!=200
+                assert request(url+"/v1/chat/completions",claude,auth_headers({"x-bf-api-key-id":anthropic_ids["c1"]}))[0]!=200
                 before=len(Upstream.calls)
-                assert request(url+"/v1/chat/completions",claude,{"x-bf-api-key-id":anthropic_ids["c2"]})[0]!=200
+                assert request(url+"/v1/chat/completions",claude,auth_headers({"x-bf-api-key-id":anthropic_ids["c2"]}))[0]!=200
                 assert len(Upstream.calls)==before,"Anthropic sibling escaped hold"
                 before=len(Upstream.calls)
                 status,raw=request(url+"/api/ltsp/accounts/account-c/probe",{})
@@ -298,9 +311,25 @@ def run(binary, evidence):
                 before=len(Upstream.calls)
                 status,raw=request(url+"/api/ltsp/accounts/account-c/probe",{})
                 assert status==200 and json.loads(raw)["recovered"] and len(Upstream.calls)==before+1,raw
+                for replacement in (None,"sk-bf-custom-fixture-key-with-at-least-32-characters"):
+                    old=access
+                    status,raw=request(url+"/api/governance/virtual-keys/"+vk["id"]+"/rotate",{} if replacement is None else {"value":replacement})
+                    assert status==200,(status,raw[:300])
+                    access=json.loads(raw)["virtual_key"]["value"]
+                    assert access!=old
+                    if replacement is not None:assert access==replacement
+                    before=len(Upstream.calls)
+                    assert request(url+"/openai/chat/completions",payload,{"Authorization":"Bearer "+old})[0] in (401,403)
+                    assert len(Upstream.calls)==before
+                    inference(path="/openai/chat/completions")
+                assert request(url+"/api/governance/virtual-keys/"+vk["id"]+"/rotate",{"value":"dummy-api-key"})[0]==400
+                inference()
+                before=len(Upstream.calls)
+                assert json.loads(request(url+"/api/ltsp/accounts/account-a/probe",{})[1])["recovered"]
+                assert len(Upstream.calls)==before+1,"probe did not use rotated native credential"
                 # A real process restart must preserve UI-registered keys and a hold.
                 Upstream.depleted=True
-                assert request(url+"/v1/chat/completions",payload,{"x-bf-api-key-id":ids["a1"]})[0]!=200
+                assert request(url+"/v1/chat/completions",payload,auth_headers({"x-bf-api-key-id":ids["a1"]}))[0]!=200
                 p.terminate()
                 p.wait(timeout=15)
                 p=subprocess.Popen([binary,"-app-dir",str(app),"-port",str(port),"-log-level","warn"],env=env,stdout=log,stderr=subprocess.STDOUT)
@@ -313,11 +342,14 @@ def run(binary, evidence):
                     time.sleep(1)
                 else:raise AssertionError("persisted hold not restored")
                 before=len(Upstream.calls)
-                assert request(url+"/v1/chat/completions",payload,{"x-bf-api-key-id":ids["a2"]})[0]!=200
+                assert json.loads(request(url+"/api/session/is-auth-enabled")[1])["inference_auth_enforced"],"inference auth did not persist"
+                assert request(url+"/openai/chat/completions",payload,{"Authorization":"Bearer dummy-api-key"})[0] in (401,403)
+                assert request(url+"/v1/chat/completions",payload,auth_headers({"x-bf-api-key-id":ids["a2"]}))[0]!=200
                 assert len(Upstream.calls)==before
                 inference()
                 stored=b"".join(f.read_bytes() for f in app.glob("config.db*"))
                 assert b"fixture-a1" not in stored,"native configuration key was stored without encryption"
+                assert access.encode() not in stored,"client access key was stored without encryption"
                 # An actual native SQLite log must contain metadata without request content.
                 for _ in range(30):
                     db = sqlite3.connect(f"file:{app / 'logs.db'}?mode=ro", uri=True)
@@ -327,13 +359,14 @@ def run(binary, evidence):
                     text = repr(rows)
                     if "native-user-session" in text and "ltsp-ip:127.0.0.1" in text:
                         assert "fixture-sensitive-prompt-do-not-log" not in text
+                        assert access not in text,"client access key appeared in usage logs"
                         break
                     time.sleep(1)
                 else:
                     raise AssertionError("native usage/session metadata was not recorded")
                 (evidence / "result.json").write_text(json.dumps({"passed": True, "inference_calls": len(Upstream.calls),
                     "proxy_connections": Proxy.connections, "checks": ["HTTP forwarding", "SSE", "fixed proxy", "IP/native session affinity",
-                    "12h default/30m explicit", "account hold", "healthy pool fallback", "immediate single probe", "native usage without prompt content"]}, indent=2))
+                    "12h default/30m explicit", "account hold", "healthy pool fallback", "immediate single probe", "native usage without prompt content", "required native virtual key", "generated/custom rotation and old-key rejection", "auth/key persistence"]}, indent=2))
                 print("Bifrost real-binary local-upstream integration passed")
             finally:
                 (evidence/"upstream-calls.json").write_text(json.dumps(Upstream.calls,indent=2))

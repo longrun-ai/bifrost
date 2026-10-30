@@ -21,14 +21,21 @@ with increasing backoff. There is no background probe worker.
 
 `/` and `/ltsp/accounts` serve the account home, with client connection examples
 derived from the current origin. Management and per-account statistics links
-open separate tabs so an unsaved account form stays in place. The SDK's
-`dummy-api-key` is a non-secret placeholder while inference auth is disabled;
-actual provider credentials remain in native key management. Native Virtual
-Keys provide a separate opt-in path for real client authentication and rotation.
+open separate tabs so an unsaved account form stays in place. Downstream inference
+requires a native Virtual Key; missing, dummy and retired keys are rejected.
+The home manages the uniquely named `ltsp-lan-clients` key in the native encrypted
+store, reveals it on request, and copies examples with its current value. Generated
+rotation and operator-supplied replacement share native rotation's transaction,
+grant revocation and cache reload. Replacements use `sk-bf-` plus URL-safe
+characters, 32–256 characters overall. The deployment uses zero rotation grace.
+There is no second key store or user/quota system. Management remains open to the
+trusted LAN, so this prevents accidental base-URL-only calls rather than a client
+that deliberately accesses the management API.
 
 The account home groups native keys and configures dates and probe models. Its
 funding button immediately sends one logged inference through the gateway's
-native HTTP admission pipeline, pinned to one enabled key without retry or
+native HTTP admission pipeline using the current shared native Virtual Key,
+pinned to one enabled provider key without retry or
 fallback. A random, single-use, in-memory marker admits that one probe; it is
 removed before request header capture and freed at consumption or completion.
 There is at most one outstanding probe per account. State writes use fsync and

@@ -3117,7 +3117,28 @@ func (h *GovernanceHandler) rotateVirtualKeyByID(ctx context.Context, vkID strin
 // rotateVirtualKey handles POST /api/governance/virtual-keys/{vk_id}/rotate - Rotate only the virtual key value
 func (h *GovernanceHandler) rotateVirtualKey(ctx *fasthttp.RequestCtx) {
 	vkID := ctx.UserValue("vk_id").(string)
-	preloadedVk, err := h.rotateVirtualKeyByID(ctx, vkID)
+	var payload struct {
+		Value *string `json:"value"`
+	}
+	if len(ctx.PostBody()) > 0 && json.Unmarshal(ctx.PostBody(), &payload) != nil {
+		SendError(ctx, 400, "Invalid JSON")
+		return
+	}
+	var preloadedVk *configstoreTables.TableVirtualKey
+	var err error
+	if payload.Value != nil {
+		if lib.LTSP == nil {
+			SendError(ctx, 400, "Custom key values require LTSP mode")
+			return
+		}
+		if err = ValidateVirtualKeyValue(*payload.Value); err != nil {
+			SendError(ctx, 400, err.Error())
+			return
+		}
+		preloadedVk, err = NewVirtualKeyRotator(h.configStore, h.governanceManager).ReplaceVirtualKeyValue(ctx, vkID, *payload.Value)
+	} else {
+		preloadedVk, err = h.rotateVirtualKeyByID(ctx, vkID)
+	}
 	if err != nil {
 		if errors.Is(err, configstore.ErrNotFound) {
 			SendError(ctx, 404, "Virtual key not found")

@@ -13,6 +13,8 @@ import (
 
 type probeOriginKey struct{}
 
+const AccessKeyName = "ltsp-lan-clients"
+
 func ProbeURL(ctx context.Context) string {
 	url, _ := ctx.Value(probeOriginKey{}).(string)
 	return url
@@ -125,7 +127,7 @@ func (m *Manager) get(ctx *fasthttp.RequestCtx) {
 			}
 		}
 	}
-	reply(ctx, 200, map[string]any{"accounts": m.Snapshot(), "keys": keys, "timezone": m.zone.String(), "balance": "unknown"})
+	reply(ctx, 200, map[string]any{"accounts": m.Snapshot(), "keys": keys, "timezone": m.zone.String(), "balance": "unknown", "access_key_name": AccessKeyName})
 }
 
 func (m *Manager) put(ctx *fasthttp.RequestCtx) {

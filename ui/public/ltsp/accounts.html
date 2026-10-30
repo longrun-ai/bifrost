@@ -243,9 +243,30 @@
 		<section class="card" aria-labelledby="client-config-title" data-testid="ltsp-client-config">
 			<div class="bar">
 				<h2 id="client-config-title">客户端接入</h2>
-				<span class="badge">下游免鉴权</span>
+				<span class="badge" id="access-status">正在读取鉴权状态…</span>
 			</div>
-			<p>把客户端的 API 地址指向本网关。厂商 API key 在管理页录入，客户端使用下面的占位值即可。</p>
+			<p>把客户端的 API 地址指向本网关，并填写下面的接入 Key。只填写地址或使用 dummy-api-key 将无法调用。</p>
+			<label for="downstream-key">客户端接入 Key</label>
+			<div class="copy-line">
+				<input id="downstream-key" type="password" readonly autocomplete="off" placeholder="正在读取…" /><button
+					type="button"
+					class="secondary"
+					id="show-access"
+				>
+					显示</button
+				><button type="button" class="secondary" data-copy="downstream-key" disabled>复制 Key</button
+				><button type="button" id="rotate-access" disabled>生成并轮换</button>
+			</div>
+			<p id="access-message" role="status" aria-live="polite"></p>
+			<small>轮换后旧 Key 立即失效，请同步更新客户端。示例默认隐藏 Key，复制配置时会自动填入当前有效值。</small>
+			<details>
+				<summary>手动设置新的接入 Key</summary>
+				<label for="custom-access">新 Key（sk-bf- 开头，32–256 个字母、数字、连字符或下划线）</label
+				><input id="custom-access" type="password" autocomplete="new-password" placeholder="sk-bf-…" />
+				<div class="actions">
+					<button type="button" id="save-access" disabled>保存并替换旧 Key</button>
+				</div>
+			</details>
 			<div class="connection-grid">
 				<div>
 					<strong>OpenAI 兼容客户端</strong>
@@ -265,26 +286,27 @@
 				</div>
 			</div>
 			<p class="key-note">
-				<code>dummy-api-key</code> 是 SDK 所需的非空占位值，不是秘密，也不是厂商
-				key。当前不校验这个值，无需设置或轮换；更换它不会限制客户端访问。真实的 OpenAI / Anthropic key 在
-				<a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a> 中录入和替换。
+				这里管理的是网关接入 Key，与厂商凭据分别维护。真实的 OpenAI / Anthropic key 在
+				<a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a>
+				中录入和替换。
 			</p>
 			<details>
-				<summary>以后需要设置、轮换真正的客户端接入密钥？</summary>
+				<summary>高级接入设置与管理边界</summary>
 				<p>
 					Bifrost 的
 					<a href="/workspace/governance/virtual-keys" target="_blank" rel="noopener noreferrer">Virtual Keys ↗</a>
-					支持创建和轮换接入密钥。还需在
-					<a href="/workspace/config" target="_blank" rel="noopener noreferrer">设置 ↗</a> 中启用推理鉴权，客户端再改填实际的 Virtual
-					Key；管理页面是否登录是独立设置。目前保持下游免鉴权。
+					可管理更多接入密钥。推理鉴权在
+					<a href="/workspace/config" target="_blank" rel="noopener noreferrer">设置 ↗</a>
+					中单独配置。管理页仍向可信 LAN 免登录开放；能访问管理 API 的程序也能管理接入 Key，此处用于防止只凭 base URL 的误调用。
 				</p>
 			</details>
 			<small>示例只创建客户端。发起调用时，选择已录入 key 有权使用的模型 ID。以上管理链接均在新标签页打开。</small>
 		</section>
 		<h2>上游账号</h2>
 		<p>
-			先在 <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a> 录入密钥，再把同一个上游账号／组织的
-			key 归入同组。<br />刷新日及前后一天允许真实请求重试，失败后逐步延长回避时间。日期本身不会恢复账号。
+			先在
+			<a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a>
+			录入密钥，再把同一个上游账号／组织的 key 归入同组。<br />刷新日及前后一天允许真实请求重试，失败后逐步延长回避时间。日期本身不会恢复账号。
 		</p>
 		<div class="bar">
 			<div id="message" role="status" aria-live="polite"></div>
@@ -303,25 +325,115 @@
 		let state = { accounts: [], keys: {} };
 		const $ = (s) => document.querySelector(s);
 		const origin = window.location.origin;
+		let accessKey = null,
+			accessVisible = false,
+			accessEnforced = false;
+		const copyValues = {};
 		$("#openai-url").textContent = origin + "/openai";
 		$("#anthropic-url").textContent = origin + "/anthropic";
-		$("#openai-example").textContent =
-			`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${origin}/openai",\n    api_key="dummy-api-key",\n)`;
-		$("#anthropic-example").textContent =
-			`from anthropic import Anthropic\n\nclient = Anthropic(\n    base_url="${origin}/anthropic",\n    api_key="dummy-api-key",\n)`;
+		function accessMessage(text, error = false) {
+			$("#access-message").textContent = text;
+			$("#access-message").style.color = error ? "#a52e3e" : "";
+		}
+		function renderAccess() {
+			const value = accessKey?.value || "";
+			$("#downstream-key").value = value;
+			$("#downstream-key").type = accessVisible ? "text" : "password";
+			$("#show-access").textContent = accessVisible ? "隐藏" : "显示";
+			$("#access-status").textContent = accessEnforced ? "下游鉴权已启用" : "下游鉴权未启用";
+			$("#rotate-access").textContent = accessKey ? "生成并轮换" : "创建接入 Key";
+			$("#rotate-access").disabled = false;
+			$("#save-access").disabled = !accessKey;
+			copyValues["downstream-key"] = value;
+			for (const [provider, klass] of [
+				["openai", "OpenAI"],
+				["anthropic", "Anthropic"],
+			]) {
+				const example = (key) =>
+					`from ${provider} import ${klass}\n\nclient = ${klass}(\n    base_url="${origin}/${provider}",\n    api_key="${key}",\n)`;
+				copyValues[provider + "-example"] = example(value);
+				$("#" + provider + "-example").textContent = example(accessVisible && value ? value : "••••••（复制配置会填入当前 Key）");
+			}
+			for (const id of ["downstream-key", "openai-example", "anthropic-example"])
+				document.querySelector(`[data-copy="${id}"]`).disabled = !value || accessKey?.is_active === false;
+		}
+		async function loadAccess() {
+			const [auth, keys] = await Promise.all([
+				api("/api/session/is-auth-enabled"),
+				api("/api/governance/virtual-keys?search=" + encodeURIComponent(state.access_key_name)),
+			]);
+			accessEnforced = auth.inference_auth_enforced === true;
+			accessKey = (keys.virtual_keys || []).find((key) => key.name === state.access_key_name) || null;
+			renderAccess();
+			if (!accessEnforced) accessMessage("下游鉴权当前未启用，请在设置中启用。", true);
+			else if (!accessKey) accessMessage("尚无接入 Key，请点击“创建接入 Key”。");
+		}
+		async function changeAccess(value) {
+			const controls = [$("#rotate-access"), $("#save-access")];
+			controls.forEach((button) => (button.disabled = true));
+			try {
+				if (!accessKey) {
+					await api("/api/governance/virtual-keys", "POST", {
+						name: state.access_key_name,
+						allow_all_providers: true,
+						is_active: true,
+						disable_content_logging: true,
+					});
+				} else {
+					await api(
+						"/api/governance/virtual-keys/" + encodeURIComponent(accessKey.id) + "/rotate",
+						"POST",
+						value === undefined ? {} : { value },
+					);
+				}
+				await loadAccess();
+				$("#custom-access").value = "";
+				accessMessage("接入 Key 已更新。请复制新配置到客户端，旧 Key 已失效。");
+			} catch (error) {
+				accessMessage(error.message, true);
+			} finally {
+				controls.forEach((button) => (button.disabled = false));
+			}
+		}
+		$("#show-access").onclick = () => {
+			accessVisible = !accessVisible;
+			renderAccess();
+		};
+		$("#rotate-access").onclick = () => changeAccess();
+		$("#save-access").onclick = () => {
+			const value = $("#custom-access").value;
+			if (!/^sk-bf-[A-Za-z0-9_-]{26,250}$/.test(value)) {
+				accessMessage("新 Key 必须以 sk-bf- 开头，共 32–256 个 URL 安全字符。", true);
+				return;
+			}
+			if (value === accessKey?.value) {
+				accessMessage("新 Key 与当前值相同。", true);
+				return;
+			}
+			changeAccess(value);
+		};
 		for (const button of document.querySelectorAll("[data-copy]"))
 			button.onclick = async () => {
 				const source = document.getElementById(button.dataset.copy);
+				if (Object.hasOwn(copyValues, source.id)) {
+					try {
+						await loadAccess();
+					} catch (error) {
+						accessMessage(error.message, true);
+						return;
+					}
+				}
+				const text = copyValues[source.id] ?? source.textContent;
 				let copied = false;
 				if (window.isSecureContext && navigator.clipboard) {
 					try {
-						await navigator.clipboard.writeText(source.textContent);
+						await navigator.clipboard.writeText(text);
 						copied = true;
 					} catch {}
 				}
 				if (!copied) {
 					const input = document.createElement("textarea");
-					input.value = source.textContent;
+					input.value = text;
 					input.readOnly = true;
 					input.style.cssText = "position:fixed;left:-9999px;top:0";
 					document.body.append(input);
@@ -338,6 +450,10 @@
 						button.textContent = label;
 					}, 1800);
 				} else {
+					if (Object.hasOwn(copyValues, source.id)) {
+						accessVisible = true;
+						renderAccess();
+					}
 					const range = document.createRange();
 					range.selectNodeContents(source);
 					const selection = window.getSelection();
@@ -445,6 +561,7 @@
 				message(e.message, true);
 			} finally {
 				$("#save").disabled = false;
+				loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
 			}
 		};
 		api("/api/ltsp/accounts")
@@ -453,6 +570,7 @@
 				render();
 				$("#add").disabled = false;
 				$("#save").disabled = false;
+				loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
 			})
 			.catch((e) => message("配置读取失败，请刷新页面重试：" + e.message, true));
 	</script>

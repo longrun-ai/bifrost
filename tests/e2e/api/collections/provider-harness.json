@@ -276829,6 +276829,132 @@
           ]
         }
       ]
+    },
+    {
+      "name": "LTSP required client key",
+      "description": "LTSP mode with inference auth enabled. Reject missing/dummy keys and test native custom rotation on a dedicated short-lived key. Management-only rotation consumes no provider credits.",
+      "item": [
+        {
+          "name": "LTSP OpenAI missing key [EXPECT-401]",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-5.6\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK.\"}]}"
+            },
+            "url": "{{baseUrl}}/openai/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "['x-bf-vk','x-api-key','x-goog-api-key','api-key'].forEach(function (h) { pm.request.headers.remove(h); });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Required client key rejects unauthenticated call', function () { pm.expect(pm.response.code, pm.response.text()).to.equal(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LTSP OpenAI dummy key [EXPECT-401]",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer dummy-api-key"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-5.6\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK.\"}]}"
+            },
+            "url": "{{baseUrl}}/openai/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "['x-bf-vk','x-api-key','x-goog-api-key','api-key'].forEach(function (h) { pm.request.headers.remove(h); });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Required client key rejects unauthenticated call', function () { pm.expect(pm.response.code, pm.response.text()).to.equal(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LTSP OpenAI custom client key rotation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"ltsp-harness-{{$guid}}\",\"allow_all_providers\":false,\"is_active\":true}"
+            },
+            "url": "{{baseUrl}}/api/governance/virtual-keys"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created isolated harness key', function () { pm.expect(pm.response.code, pm.response.text()).to.be.oneOf([200,201]); });",
+                  "if (pm.response.code !== 200 && pm.response.code !== 201) { throw new Error(pm.response.text()); }",
+                  "var key = pm.response.json().virtual_key;",
+                  "var value = 'sk-bf-harness-' + pm.variables.replaceIn('{{$guid}}');",
+                  "var target = pm.variables.get('baseUrl') + '/api/governance/virtual-keys/' + key.id;",
+                  "pm.sendRequest({url:target+'/rotate',method:'POST',header:{'Content-Type':'application/json'},body:{mode:'raw',raw:JSON.stringify({value:value})}}, function (err, res) {",
+                  "  pm.test('Custom value uses native rotation', function () { pm.expect(err).to.equal(null); pm.expect(res.code,res.text()).to.equal(200); pm.expect(res.json().virtual_key.value).to.equal(value); });",
+                  "  pm.sendRequest({url:target,method:'DELETE'}, function (cleanupErr, cleanup) { pm.test('Harness key removed', function () { pm.expect(cleanupErr).to.equal(null); pm.expect(cleanup.code,cleanup.text()).to.equal(200); }); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

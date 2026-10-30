@@ -6,6 +6,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -48,12 +49,33 @@ func (r *VirtualKeyRotator) VKRotationCooldown(ctx context.Context) time.Duratio
 // onto the returned row. Callers passing a background context run unscoped by
 // DAC, which is intended for system-initiated rotation.
 func (r *VirtualKeyRotator) RotateVirtualKey(ctx context.Context, vkID string) (*configstoreTables.TableVirtualKey, error) {
+	return r.ReplaceVirtualKeyValue(ctx, vkID, governance.GenerateVirtualKey())
+}
+
+// ValidateVirtualKeyValue keeps operator-supplied keys compatible with native SDK headers.
+func ValidateVirtualKeyValue(value string) error {
+	if !strings.HasPrefix(value, "sk-bf-") || len(value) < 32 || len(value) > 256 {
+		return fmt.Errorf("key must start with sk-bf- and contain 32-256 URL-safe characters")
+	}
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return fmt.Errorf("key must contain only letters, digits, '-' and '_'")
+		}
+	}
+	return nil
+}
+
+// ReplaceVirtualKeyValue shares native rotation, revocation and cache reload semantics.
+func (r *VirtualKeyRotator) ReplaceVirtualKeyValue(ctx context.Context, vkID, value string) (*configstoreTables.TableVirtualKey, error) {
+	if err := ValidateVirtualKeyValue(value); err != nil {
+		return nil, err
+	}
 	vk, err := r.configStore.GetVirtualKey(ctx, vkID)
 	if err != nil {
 		return nil, err
 	}
 	oldValue := vk.Value.GetValue()
-	vk.Value = *schemas.NewSecretVar(governance.GenerateVirtualKey())
+	vk.Value = *schemas.NewSecretVar(value)
 	if vk.Value.GetValue() == oldValue {
 		return nil, fmt.Errorf("generated virtual key matched existing value")
 	}
