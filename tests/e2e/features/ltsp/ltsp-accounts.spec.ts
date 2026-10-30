@@ -530,6 +530,23 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
   await expect(page.locator("#message")).toContainText("fixture write failed");
   await expect(page.locator("#dirty-dot")).toBeVisible();
   await expect(page.getByLabel("账号组名称")).toHaveValue("Write failure draft");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const separate = await page.evaluate(() => {
+    const add = document.querySelector("#add")!.getBoundingClientRect();
+    const save = document.querySelector("#account-groups .save-toolbar")!.getBoundingClientRect();
+    return (
+      add.right <= save.left ||
+      save.right <= add.left ||
+      add.bottom <= save.top ||
+      save.bottom <= add.top
+    );
+  });
+  expect(
+    separate,
+    "Scoped save must not cover the add-group button on narrow screens",
+  ).toBeTruthy();
+  await page.locator("#add").click({ trial: true });
 });
 
 test("LTSP native account CRUD saves immediately while preserving policy drafts", async ({
