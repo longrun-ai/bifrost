@@ -50,6 +50,11 @@ class Upstream(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_GET(self):
+        if self.headers.get("x-api-key", "").startswith("fixture-c"):
+            self.send_json(200, {"data": [{"id": "claude-test", "type": "model", "display_name": "Fixture Claude",
+                                          "created_at": "2026-01-01T00:00:00Z"}], "has_more": False,
+                                 "first_id": "claude-test", "last_id": "claude-test"})
+            return
         self.send_json(200, {"object": "list", "data": [{"id": "gpt-6.1-sol", "object": "model", "created": 0, "owned_by": "openai"}]})
 
     def do_POST(self):
