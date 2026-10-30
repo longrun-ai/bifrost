@@ -10,6 +10,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +56,30 @@ func defaultSchedules() []ProviderSchedule {
 	}
 }
 
+// Fixed GMT offsets are a user choice; regional names retain IANA/DST rules.
+func refreshTimezone(name string) (*time.Location, error) {
+	if !strings.HasPrefix(name, "GMT+") && !strings.HasPrefix(name, "GMT-") {
+		return time.LoadLocation(name)
+	}
+	if len(name) != 9 || (name[3] != '+' && name[3] != '-') || name[6] != ':' || name[4] < '0' || name[4] > '9' || name[5] < '0' || name[5] > '9' || (name[7:] != "00" && name[7:] != "30") {
+		return nil, errors.New("GMT 偏移须为 GMT±HH:00 或 GMT±HH:30")
+	}
+	hour, _ := strconv.Atoi(name[4:6])
+	minute, _ := strconv.Atoi(name[7:])
+	limit := 14
+	if name[3] == '-' {
+		limit = 12
+	}
+	if hour > limit || (hour == limit && minute != 0) {
+		return nil, errors.New("GMT 偏移须在 -12:00 至 +14:00 之间")
+	}
+	offset := (hour*60 + minute) * 60
+	if name[3] == '-' {
+		offset = -offset
+	}
+	return time.FixedZone(name, offset), nil
+}
+
 func validateSchedules(schedules []ProviderSchedule) ([]ProviderSchedule, error) {
 	if len(schedules) != 2 {
 		return nil, errors.New("须配置 OpenAI 和 Anthropic 的时区与刷新截止时间")
@@ -72,10 +97,10 @@ func validateSchedules(schedules []ProviderSchedule) ([]ProviderSchedule, error)
 			return nil, errors.New("探测模型无效")
 		}
 		if s.Timezone == "" || s.Timezone == "Local" {
-			return nil, errors.New("请指定 IANA 时区，例如 UTC 或 America/Los_Angeles")
+			return nil, errors.New("请选择 GMT 偏移或地区时区")
 		}
 		var err error
-		s.zone, err = time.LoadLocation(s.Timezone)
+		s.zone, err = refreshTimezone(s.Timezone)
 		if err != nil {
 			return nil, errors.New("无效时区：" + s.Timezone)
 		}
@@ -215,15 +240,92 @@ func (m *Manager) Schedules() []ProviderSchedule {
 
 // Replace edits policy only. UI clients cannot clear an exhaustion hold or its backoff.
 func (m *Manager) Replace(accounts []Account, schedules []ProviderSchedule) error {
+	return m.Edit(&accounts, &schedules)
+}
+
+// Separate page sections save only their own fields, against current server state.
+func (m *Manager) Edit(accountEdit *[]Account, scheduleEdit *[]ProviderSchedule) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if accountEdit == nil && scheduleEdit == nil {
+		return errors.New("没有可保存的配置")
+	}
+	accounts := append([]Account(nil), m.accounts...)
+	if accountEdit != nil {
+		accounts = *accountEdit
+		for i, a := range accounts {
+			if a.KeyIDs != nil {
+				continue
+			}
+			for _, current := range m.accounts {
+				if a.ID == current.ID {
+					if a.Provider != current.Provider && len(current.KeyIDs) > 0 {
+						return errors.New("先解除账号关联，再更改账号组上游")
+					}
+					accounts[i].KeyIDs = append([]string{}, current.KeyIDs...)
+					break
+				}
+			}
+		}
+	}
 	if err := validate(accounts); err != nil {
 		return err
 	}
-	next, err := validateSchedules(schedules)
-	if err != nil {
-		return err
+	next := m.schedules
+	if scheduleEdit != nil {
+		var err error
+		next, err = validateSchedules(*scheduleEdit)
+		if err != nil {
+			return err
+		}
 	}
+	return m.replaceLocked(accounts, next)
+}
+
+func (m *Manager) Assign(provider, keyID, groupID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if (provider != "openai" && provider != "anthropic") || keyID == "" {
+		return errors.New("账号参数无效")
+	}
+	found := groupID == ""
+	accounts := append([]Account(nil), m.accounts...)
+	for i, a := range accounts {
+		accounts[i].KeyIDs = []string{}
+		for _, id := range a.KeyIDs {
+			if a.Provider != provider || id != keyID {
+				accounts[i].KeyIDs = append(accounts[i].KeyIDs, id)
+			}
+		}
+		if a.ID == groupID {
+			if a.Provider != provider {
+				return errors.New("账号与账号组须属于同一上游")
+			}
+			found = true
+			accounts[i].KeyIDs = append(accounts[i].KeyIDs, keyID)
+		}
+	}
+	if !found {
+		return errors.New("请先保存账号组，再关联账号")
+	}
+	if groupID != "" {
+		foundKey := false
+		if m.Keys != nil {
+			for _, k := range m.Keys(provider) {
+				if k.ID == keyID {
+					foundKey = true
+					break
+				}
+			}
+		}
+		if !foundKey {
+			return errors.New("Bifrost 账号不存在")
+		}
+	}
+	return m.replaceLocked(accounts, m.schedules)
+}
+
+func (m *Manager) replaceLocked(accounts []Account, next []ProviderSchedule) error {
 	old, oldSchedules := m.accounts, m.schedules
 	byID := map[string]Account{}
 	for _, a := range old {

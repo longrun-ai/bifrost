@@ -81,6 +81,7 @@ func (m *Manager) Register(r *router.Router, middleware ...schemas.BifrostHTTPMi
 	}))
 	r.GET("/api/ltsp/accounts", chain(m.get))
 	r.PUT("/api/ltsp/accounts", chain(m.put))
+	r.PUT("/api/ltsp/assignments", chain(m.assign))
 	r.POST("/api/ltsp/accounts/{id}/probe", chain(m.probe))
 }
 
@@ -161,19 +162,22 @@ func (m *Manager) put(ctx *fasthttp.RequestCtx) {
 		reply(ctx, 413, map[string]string{"error": "配置过大"})
 		return
 	}
-	var s diskState
+	var s struct {
+		Accounts          *[]Account          `json:"accounts"`
+		ProviderSchedules *[]ProviderSchedule `json:"provider_schedules"`
+	}
 	if e := json.Unmarshal(ctx.PostBody(), &s); e != nil {
 		reply(ctx, 400, map[string]string{"error": "无效 JSON"})
 		return
 	}
-	if m.Keys != nil {
+	if m.Keys != nil && s.Accounts != nil {
 		owners := map[string]string{}
 		for _, p := range []string{"openai", "anthropic"} {
 			for _, k := range m.Keys(p) {
 				owners[k.ID] = p
 			}
 		}
-		for _, a := range s.Accounts {
+		for _, a := range *s.Accounts {
 			for _, id := range a.KeyIDs {
 				if owner, known := owners[id]; known && owner != a.Provider {
 					reply(ctx, 400, map[string]string{"error": "Bifrost 账号与账号组须属于同一上游"})
@@ -182,8 +186,28 @@ func (m *Manager) put(ctx *fasthttp.RequestCtx) {
 			}
 		}
 	}
-	if e := m.Replace(s.Accounts, s.ProviderSchedules); e != nil {
+	if e := m.Edit(s.Accounts, s.ProviderSchedules); e != nil {
 		reply(ctx, 400, map[string]string{"error": e.Error()})
+		return
+	}
+	m.get(ctx)
+}
+
+func (m *Manager) assign(ctx *fasthttp.RequestCtx) {
+	if !sameOrigin(ctx) {
+		return
+	}
+	var input struct {
+		Provider string `json:"provider"`
+		KeyID    string `json:"key_id"`
+		GroupID  string `json:"group_id"`
+	}
+	if json.Unmarshal(ctx.PostBody(), &input) != nil {
+		reply(ctx, 400, map[string]string{"error": "无效 JSON"})
+		return
+	}
+	if err := m.Assign(input.Provider, input.KeyID, input.GroupID); err != nil {
+		reply(ctx, 400, map[string]string{"error": err.Error()})
 		return
 	}
 	m.get(ctx)

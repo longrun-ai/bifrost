@@ -331,6 +331,76 @@ func BenchmarkRetryWindow(b *testing.B) {
 	}
 }
 
+func TestFixedGMTTimezoneOffsetsAndBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		offset int
+	}{
+		{"GMT+05:30", 19800}, {"GMT-03:30", -12600}, {"GMT-00:30", -1800}, {"GMT+14:00", 50400}, {"GMT-12:00", -43200}, {"GMT", 0},
+	} {
+		s := defaultSchedules()
+		s[0].Timezone = tc.name
+		s, err := validateSchedules(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		now := time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
+		start, end := RetryWindow("2026-10-29", "monthly", now, s[0])
+		_, offset := start.Zone()
+		if offset != tc.offset || start.Hour() != 20 || end.Sub(start) != 48*time.Hour {
+			t.Fatal(tc, start, end)
+		}
+	}
+	for _, name := range []string{"GMT+14:30", "GMT-12:30", "GMT+15:00", "GMT+5:30", "GMT+05:45", "GMT+aa:00"} {
+		s := defaultSchedules()
+		s[0].Timezone = name
+		if _, err := validateSchedules(s); err == nil {
+			t.Fatal("invalid GMT accepted", name)
+		}
+	}
+}
+
+func TestIndependentEditsAndImmediateAssignmentPreserveOtherState(t *testing.T) {
+	m := manager(t)
+	m.End(ctx(), "openai", schemas.Key{ID: "k1"}, quota())
+	s := m.Schedules()
+	s[0].Timezone = "GMT+05:30"
+	if err := m.Edit(nil, &s); err != nil {
+		t.Fatal(err)
+	}
+	groups := m.Snapshot()
+	groups[0].Name = "renamed"
+	groups[0].KeyIDs = nil
+	if err := m.Edit(&groups, nil); err != nil {
+		t.Fatal(err)
+	}
+	if m.Schedules()[0].Timezone != "GMT+05:30" || len(m.Snapshot()[0].KeyIDs) != 2 || !m.Snapshot()[0].Exhausted {
+		t.Fatal("section save overwrote unrelated fields")
+	}
+	if err := m.Assign("openai", "k1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Snapshot()[0].KeyIDs) != 1 || !m.Snapshot()[0].Exhausted {
+		t.Fatal("unassign cleared hold")
+	}
+	if err := m.Assign("anthropic", "missing", "one"); err == nil {
+		t.Fatal("cross-provider association allowed")
+	}
+	if err := m.Assign("openai", "k1", "unsaved"); err == nil {
+		t.Fatal("unsaved group accepted")
+	}
+	if err := m.Assign("openai", "k1", "one"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Open(m.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Snapshot()[0].KeyIDs) != 2 || r.Snapshot()[0].Name != "renamed" || !r.Snapshot()[0].Exhausted || r.Schedules()[0].Timezone != "GMT+05:30" {
+		t.Fatal("assignment/edit state did not persist")
+	}
+}
+
 func TestProbeTriesEachUnsupportedCatalogModelOnce(t *testing.T) {
 	m := manager(t)
 	s := m.Schedules()

@@ -14,6 +14,9 @@
     * {
       box-sizing: border-box;
     }
+    [hidden] {
+      display: none !important;
+    }
     body {
       margin: 0;
     }
@@ -21,6 +24,81 @@
       max-width: 1280px;
       margin: 40px auto;
       padding: 0 24px;
+    }
+    .save-toolbar {
+      position: sticky;
+      bottom: 12px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1px solid #dce1eb;
+      border-radius: 12px;
+      box-shadow: 0 6px 24px #0002;
+    }
+    #save,
+    #save-provider {
+      position: relative;
+    }
+    #dirty-dot,
+    #provider-dirty-dot {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #dc2626;
+      border: 2px solid white;
+    }
+    #save-state,
+    #provider-save-state {
+      font-size: 13px;
+      color: #64748b;
+    }
+    .policy-section {
+      border: 1px solid #dce1eb;
+      border-radius: 14px;
+      padding: 20px;
+      margin: 24px 0;
+      background: white;
+    }
+    .section-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .section-footer .save-toolbar {
+      margin-left: auto;
+    }
+    dialog {
+      width: 440px;
+      max-width: calc(100vw - 32px);
+      border: 1px solid #c5cedd;
+      border-radius: 14px;
+      padding: 24px;
+      background: white;
+      color: #182438;
+    }
+    dialog::backdrop {
+      background: #0006;
+    }
+    dialog input,
+    dialog select {
+      margin-bottom: 16px;
+    }
+    dialog .check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    dialog .check input {
+      width: auto;
+      margin: 0;
     }
     nav {
       display: flex;
@@ -254,7 +332,47 @@
       min-width: 170px;
     }
     .group-table td:nth-child(5) {
-      min-width: 250px;
+      min-width: 150px;
+    }
+    .recovery-info,
+    .icon-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 5px;
+    }
+    .recovery-details {
+      position: fixed;
+      inset: auto;
+      margin: 0;
+      width: 380px;
+      max-width: calc(100vw - 24px);
+      max-height: calc(100vh - 24px);
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid #c5cedd;
+      border-radius: 9px;
+      background: #fff;
+      color: #182438;
+      box-shadow: 0 8px 24px #0002;
+      font: 13px/1.7 system-ui;
+    }
+    .recovery-details span {
+      display: block;
+    }
+    .gmt-offset {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .gmt-offset select {
+      width: auto;
+      min-width: 70px;
+    }
+    .timezone-editor > select {
+      width: 100%;
     }
     .key-table,
     .provider-table {
@@ -271,6 +389,21 @@
       min-width: 260px;
     }
     @media (prefers-color-scheme: dark) {
+      .policy-section,
+      dialog {
+        background: #1a2432;
+        color: #e0e6f2;
+        border-color: #394458;
+      }
+      .save-toolbar {
+        background: #1a2432;
+        border-color: #394458;
+      }
+      .recovery-details {
+        background: #1a2432;
+        color: #e0e6f2;
+        border-color: #394458;
+      }
       .table-scroll {
         background: #1a2432;
         border-color: #394458;
@@ -369,32 +502,47 @@
       </details>
       <div class="connection-grid">
         <div>
-          <strong>OpenAI 兼容客户端</strong>
+          <strong>OpenAI 兼容客户端 Base URL</strong>
           <div class="copy-line">
             <code id="openai-url"></code
             ><button type="button" class="secondary" data-copy="openai-url">复制地址</button>
           </div>
-          <pre id="openai-example"></pre>
-          <button type="button" class="secondary" data-copy="openai-example">
-            复制 Python 配置
-          </button>
+          <details id="openai-python">
+            <summary>Python 配置</summary>
+            <p>
+              同一 Base URL 同时支持 <code>/responses</code>、<code>/chat/completions</code> 和传统
+              <code>/completions</code>。分别调用
+              <code>client.responses.create()</code
+              >、<code>client.chat.completions.create()</code>、<code>client.completions.create()</code>；模型须支持对应接口。
+            </p>
+            <pre id="openai-example"></pre>
+            <button type="button" class="secondary" data-copy="openai-example">
+              复制 Python 配置
+            </button>
+          </details>
         </div>
         <div>
-          <strong>Anthropic 客户端</strong>
+          <strong>Anthropic 客户端 Base URL</strong>
           <div class="copy-line">
             <code id="anthropic-url"></code
             ><button type="button" class="secondary" data-copy="anthropic-url">复制地址</button>
           </div>
-          <pre id="anthropic-example"></pre>
-          <button type="button" class="secondary" data-copy="anthropic-example">
-            复制 Python 配置
-          </button>
+          <details id="anthropic-python">
+            <summary>Python 配置</summary>
+            <p>
+              使用 <code>client.messages.create()</code>，SDK 会追加 <code>/v1/messages</code>。
+            </p>
+            <pre id="anthropic-example"></pre>
+            <button type="button" class="secondary" data-copy="anthropic-example">
+              复制 Python 配置
+            </button>
+          </details>
         </div>
       </div>
       <p class="key-note">
-        这里管理的是网关接入 Key，与厂商凭据分别维护。真实的 OpenAI / Anthropic key 在
-        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a>
-        中录入和替换。
+        这里管理的是网关接入 Key。OpenAI / Anthropic 厂商凭据在下方“Bifrost 账号”中管理，
+        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
+        可调整模型范围和权重。
       </p>
       <details>
         <summary>高级接入设置与管理边界</summary>
@@ -416,13 +564,8 @@
     </section>
     <div class="bar">
       <div id="message" role="status" aria-live="polite"></div>
-      <div class="actions">
-        <button id="add" data-testid="ltsp-account-add" class="secondary" disabled>
-          添加账号组</button
-        ><button id="save" data-testid="ltsp-account-save" disabled>保存配置</button>
-      </div>
     </div>
-    <section aria-labelledby="groups-title">
+    <section id="account-groups" class="policy-section" aria-labelledby="groups-title">
       <h2 id="groups-title">账号组</h2>
       <p>
         把共用同一额度的账号归为一组。刷新日期按上游配置中的时区解读；余额、暂停与恢复以组为单位。
@@ -448,13 +591,23 @@
           </tbody>
         </table>
       </div>
+      <div class="section-footer">
+        <button id="add" data-testid="ltsp-account-add" class="secondary" disabled>
+          添加账号组
+        </button>
+        <div class="save-toolbar">
+          <strong>账号组</strong
+          ><span id="save-state" role="status" aria-live="polite">正在读取配置…</span
+          ><button id="save" data-testid="ltsp-account-save" disabled>
+            保存配置<span id="dirty-dot" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
     </section>
-    <section aria-labelledby="keys-title">
+    <section id="native-accounts" aria-labelledby="keys-title">
       <div class="bar">
         <h2 id="keys-title">Bifrost 账号</h2>
-        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer"
-          >录入／管理 API key ↗</a
-        >
+        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
       </div>
       <p>
         每行对应 Bifrost 中的一条 API key。选择同一上游的账号组；留空表示不归组，按原生账号池转发。
@@ -467,17 +620,22 @@
               <th>上游</th>
               <th>状态</th>
               <th>所属账号组（留空可不关联）</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr id="keys-empty">
-              <td colspan="4" class="empty">尚无 Bifrost 账号，请先录入 API key。</td>
+              <td colspan="5" class="empty">尚无 Bifrost 账号，请先录入 API key。</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <div class="section-footer">
+        <button id="add-native-account" class="secondary" disabled>添加账号</button
+        ><span id="account-message" role="status" aria-live="polite"></span>
+      </div>
     </section>
-    <section aria-labelledby="providers-title">
+    <section id="upstream-settings" class="policy-section" aria-labelledby="providers-title">
       <h2 id="providers-title">上游配置</h2>
       <p>
         时区与刷新截止时间一起确定重试起点。默认 UTC 20:00；从账号组刷新日期当天的截止时间起允许重试
@@ -488,7 +646,7 @@
           <thead>
             <tr>
               <th>上游</th>
-              <th>时区（IANA）</th>
+              <th>时区</th>
               <th>刷新截止时间</th>
               <th>探测模型</th>
             </tr>
@@ -503,6 +661,16 @@
         <option value="America/New_York"></option>
         <option value="Europe/London"></option>
       </datalist>
+      <div class="section-footer">
+        <div class="save-toolbar">
+          <strong>上游配置</strong
+          ><span id="provider-save-state" role="status" aria-live="polite">正在读取配置…</span
+          ><button id="save-provider" disabled>
+            保存上游配置<span id="provider-dirty-dot" hidden aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+      <small>GMT 固定偏移不会随夏令时变化；需要夏令时或其它分钟偏移时，选择“地区时区”。</small>
       <small
         >探测模型留空时，从 catalog
         随机选择该组账号可用的文本模型，成功后填入并保存。已配置模型明确不支持时也会重新选择；余额、认证、限流及网络错误直接反馈。</small
@@ -539,23 +707,42 @@
       </td>
       <td class="balance"></td>
       <td>
-        <span class="status"></span
-        ><small
-          ><span class="retry-window" style="white-space: pre-line"></span><br /><span
+        <span class="status"></span>
+        <button
+          type="button"
+          class="recovery-info secondary"
+          aria-label="查看重试详情"
+          aria-expanded="false"
+        >
+          ⓘ
+        </button>
+        <div class="recovery-details" popover="auto" role="tooltip">
+          <span class="retry-window" style="white-space: pre-line"></span><br /><span
             class="next-retry"
           ></span
-          ><br /><span class="last-checked"></span><br /><span class="last-result"></span
-        ></small>
+          ><br /><span class="last-checked"></span><br /><span class="last-result"></span>
+        </div>
       </td>
       <td>
         <div class="actions">
           <a class="stats" target="_blank" rel="noopener noreferrer">查看该组调用统计 ↗</a
           ><button class="probe">已到账，立即重试</button
-          ><button class="remove danger">删除账号组</button>
+          ><button class="remove danger icon-button" aria-label="删除账号组" title="删除账号组">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />
+            </svg>
+          </button>
         </div>
-      </td>
-    </tr></template
-  >
+      </td></tr
+  ></template>
   <template id="key-row"
     ><tr>
       <td>
@@ -567,12 +754,45 @@
         <select>
           <option value=""></option>
         </select>
+      </td>
+      <td>
+        <div class="actions">
+          <button class="edit-account secondary icon-button" aria-label="编辑账号" title="编辑账号">
+            ✎</button
+          ><button class="delete-account danger icon-button" aria-label="删除账号" title="删除账号">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />
+            </svg>
+          </button>
+        </div>
       </td></tr
   ></template>
   <template id="provider-row"
     ><tr>
       <td class="provider-name"></td>
-      <td><input name="timezone" list="timezones" required /></td>
+      <td class="timezone-editor">
+        <select name="timezone_mode">
+          <option value="fixed">GMT 固定偏移</option>
+          <option value="region">地区时区（夏令时）</option>
+        </select>
+        <div class="gmt-offset">
+          GMT
+          <select name="gmt_hour"></select
+          ><select name="gmt_minute">
+            <option value="00">:00</option>
+            <option value="30">:30</option>
+          </select>
+        </div>
+        <input name="timezone" list="timezones" placeholder="例如 America/Los_Angeles" required />
+      </td>
       <td><input name="cutoff" type="time" required /></td>
       <td>
         <input name="probe_model" maxlength="200" placeholder="留空：自动选择并记住" />
@@ -585,6 +805,37 @@
     tabindex="-1"
     style="position: fixed; left: -9999px; top: 0"
   ></textarea>
+  <dialog id="account-dialog" aria-labelledby="account-dialog-title">
+    <form id="account-form">
+      <h2 id="account-dialog-title">添加账号</h2>
+      <label for="account-provider">上游</label
+      ><select id="account-provider">
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option></select
+      ><label for="account-name">账号名称</label
+      ><input id="account-name" maxlength="200" required /><label for="account-secret"
+        >API key</label
+      ><input id="account-secret" type="password" autocomplete="new-password" required /><label
+        class="check"
+        ><input id="account-enabled" type="checkbox" checked />启用</label
+      >
+      <p id="account-error" role="alert"></p>
+      <div class="actions">
+        <button id="account-submit" type="submit">保存账号</button
+        ><button id="account-cancel" class="secondary" type="button">取消</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="delete-account-dialog" aria-labelledby="delete-account-title">
+    <h2 id="delete-account-title">删除账号</h2>
+    <p id="delete-account-name"></p>
+    <p>删除该 API key 及其归组关联？</p>
+    <p id="delete-account-error" role="alert"></p>
+    <div class="actions">
+      <button id="confirm-delete-account" class="danger">删除账号</button
+      ><button id="cancel-delete-account" class="secondary">取消</button>
+    </div>
+  </dialog>
   <script>
     let state = { accounts: [], keys: {}, provider_schedules: [] };
     const $ = (s) => document.querySelector(s);
@@ -749,9 +1000,32 @@
         }
       };
     const providerName = (p) => ({ openai: "OpenAI", anthropic: "Anthropic" })[p] || p;
+    function fixedTimezone(zone) {
+      if (zone === "UTC" || zone === "GMT") return { hour: "+00", minute: "00", offset: 0 };
+      const match = /^GMT([+-][0-9]{2}):(00|30)$/.exec(zone || "");
+      if (!match) return null;
+      return {
+        hour: match[1],
+        minute: match[2],
+        offset:
+          (Math.abs(Number(match[1])) * 60 + Number(match[2])) * (match[1][0] === "-" ? -1 : 1),
+      };
+    }
+    const zoneLabel = (zone) =>
+      zone === "UTC" || zone === "GMT" ? "GMT+00:00" : zone || "待设置时区";
     const format = (s, zone) => {
       if (!s || s.startsWith("0001-")) return "—";
       try {
+        const fixed = fixedTimezone(zone);
+        if (fixed)
+          return (
+            new Date(Date.parse(s) + fixed.offset * 60000).toLocaleString("zh-CN", {
+              timeZone: "UTC",
+              hour12: false,
+            }) +
+            " " +
+            zoneLabel(zone)
+          );
         return new Date(s).toLocaleString("zh-CN", {
           timeZone: zone,
           timeZoneName: "short",
@@ -762,6 +1036,73 @@
       }
     };
     let policyBusy = false;
+    let accountBusy = false;
+    let savedPolicy = null;
+    const assigning = () => !!document.querySelector("#key-assignments select[data-pending]");
+    function acceptSaved(value, committed = "all") {
+      const previous = savedPolicy,
+        drafts = state;
+      savedPolicy = payload(value);
+      state = { ...value };
+      if (!previous || committed === "all") return;
+      if (committed !== "groups") {
+        state.accounts = drafts.accounts.flatMap((draft) => {
+          const before = previous.accounts.find((a) => a.id === draft.id);
+          const actual = value.accounts.find((a) => a.id === draft.id);
+          if (!before) return [draft];
+          if (!actual) return [];
+          const merged = { ...actual };
+          for (const field of ["name", "provider", "refresh_date", "cycle"])
+            if (draft[field] !== before[field]) merged[field] = draft[field];
+          return [merged];
+        });
+        for (const actual of value.accounts)
+          if (
+            !previous.accounts.some((a) => a.id === actual.id) &&
+            !state.accounts.some((a) => a.id === actual.id)
+          )
+            state.accounts.push(actual);
+      }
+      if (committed !== "providers") {
+        state.provider_schedules = value.provider_schedules.map((actual) => {
+          const before = previous.provider_schedules.find((s) => s.provider === actual.provider);
+          const draft = drafts.provider_schedules.find((s) => s.provider === actual.provider);
+          const merged = { ...actual };
+          if (before && draft)
+            for (const field of ["timezone", "cutoff", "probe_model"])
+              if (draft[field] !== before[field]) merged[field] = draft[field];
+          return merged;
+        });
+      }
+    }
+    function signature(value, scope) {
+      const policy = payload(value);
+      for (const a of policy.accounts) a.key_ids = [...(a.key_ids || [])].sort();
+      policy.provider_schedules = policy.provider_schedules.map((s) => ({
+        ...s,
+        timezone: fixedTimezone(s.timezone)?.offset === 0 ? "GMT+00:00" : s.timezone,
+      }));
+      return JSON.stringify(scope === "groups" ? policy.accounts : policy.provider_schedules);
+    }
+    function dirty(scope) {
+      return (
+        savedPolicy !== null &&
+        (scope
+          ? signature(state, scope) !== signature(savedPolicy, scope)
+          : dirty("groups") || dirty("providers"))
+      );
+    }
+    function updateDirty() {
+      for (const [scope, button, dot, status] of [
+        ["groups", "#save", "#dirty-dot", "#save-state"],
+        ["providers", "#save-provider", "#provider-dirty-dot", "#provider-save-state"],
+      ]) {
+        const changed = dirty(scope);
+        setProp($(dot), "hidden", !changed);
+        setText($(status), policyBusy ? "正在操作…" : changed ? "有未保存的修改" : "已保存");
+        setProp($(button), "disabled", policyBusy || accountBusy || assigning() || !changed);
+      }
+    }
     function message(s, error = false) {
       setText($("#message"), s);
       setProp($("#message"), "className", error ? "error" : "");
@@ -773,7 +1114,15 @@
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const v = await r.json();
-      if (!r.ok) throw Error(v.error || `HTTP ${r.status}`);
+      if (!r.ok) {
+        const error = Error(
+          typeof v.error === "string"
+            ? v.error
+            : v.error?.message || v.message || `HTTP ${r.status}`,
+        );
+        error.status = r.status;
+        throw error;
+      }
       return v;
     }
     function collect() {
@@ -784,13 +1133,25 @@
       }
       for (const row of document.querySelectorAll("#provider-settings tr[data-provider]")) {
         const settings = state.provider_schedules.find((s) => s.provider === row.dataset.provider);
-        for (const field of ["timezone", "cutoff", "probe_model"])
+        for (const field of ["cutoff", "probe_model"])
           settings[field] = row.querySelector(`[name=${field}]`).value;
+        if (row.querySelector("[name=timezone_mode]").value === "region")
+          settings.timezone = row.querySelector("[name=timezone]").value;
+        else {
+          const hour = row.querySelector("[name=gmt_hour]").value,
+            minute = row.querySelector("[name=gmt_minute]");
+          if (hour === "+14" || hour === "-12") setProp(minute, "value", "00");
+          const zone = "GMT" + hour + ":" + minute.value;
+          settings.timezone =
+            (settings.timezone === "UTC" || settings.timezone === "GMT") && zone === "GMT+00:00"
+              ? settings.timezone
+              : zone;
+        }
       }
     }
-    function payload() {
+    function payload(value = state) {
       return {
-        accounts: state.accounts.map(({ id, name, provider, key_ids, refresh_date, cycle }) => ({
+        accounts: value.accounts.map(({ id, name, provider, key_ids, refresh_date, cycle }) => ({
           id,
           name,
           provider,
@@ -798,7 +1159,14 @@
           refresh_date,
           cycle,
         })),
-        provider_schedules: state.provider_schedules,
+        provider_schedules: value.provider_schedules.map(
+          ({ provider, timezone, cutoff, probe_model }) => ({
+            provider,
+            timezone,
+            cutoff,
+            probe_model,
+          }),
+        ),
       };
     }
     function rowFrom(template) {
@@ -823,8 +1191,50 @@
               const current = state.accounts.find((a) => a.id === id);
               if (field !== "name") delete current.retry_start;
               render();
-              message("有未保存的配置。");
             };
+          for (const input of row.querySelectorAll("input"))
+            input.oninput = () => {
+              collect();
+              updateDirty();
+            };
+          const info = row.querySelector(".recovery-info"),
+            panel = row.querySelector(".recovery-details");
+          panel.id = "retry-details-" + encodeURIComponent(id);
+          setAttr(info, "aria-controls", panel.id);
+          const showDetails = () => {
+            if (!panel.matches(":popover-open")) panel.showPopover();
+            const rect = info.getBoundingClientRect();
+            setProp(
+              panel.style,
+              "left",
+              Math.max(12, Math.min(rect.left, innerWidth - panel.offsetWidth - 12)) + "px",
+            );
+            setProp(
+              panel.style,
+              "top",
+              Math.max(12, Math.min(rect.bottom + 4, innerHeight - panel.offsetHeight - 12)) + "px",
+            );
+          };
+          const closeDetails = () =>
+            setTimeout(() => {
+              if (
+                panel.matches(":popover-open") &&
+                !info.matches(":hover") &&
+                !panel.matches(":hover") &&
+                document.activeElement !== info
+              )
+                panel.hidePopover();
+            }, 120);
+          info.onpointerenter = (event) => {
+            if (event.pointerType === "mouse") showDetails();
+          };
+          info.onfocus = showDetails;
+          info.onclick = showDetails;
+          info.onpointerleave = closeDetails;
+          info.onblur = closeDetails;
+          panel.onpointerleave = closeDetails;
+          panel.ontoggle = () =>
+            setAttr(info, "aria-expanded", String(panel.matches(":popover-open")));
           row.querySelector(".remove").onclick = () => {
             collect();
             state.accounts = state.accounts.filter((a) => a.id !== id);
@@ -833,18 +1243,21 @@
           };
           row.querySelector(".probe").onclick = async () => {
             collect();
+            if (dirty()) {
+              message("请先保存账号组和上游配置，再立即探测。", true);
+              return;
+            }
             policyBusy = true;
             state.accounts.find((a) => a.id === id).busy = true;
             render();
-            message("正在保存配置并立即探测…");
+            message("正在立即探测…");
             try {
-              state = await api("/api/ltsp/accounts", "PUT", payload());
               const result = await api(
                 "/api/ltsp/accounts/" + encodeURIComponent(id) + "/probe",
                 "POST",
                 {},
               );
-              state = await api("/api/ltsp/accounts");
+              acceptSaved(await api("/api/ltsp/accounts"));
               message(result.result, !result.recovered);
             } catch (error) {
               message(error.message, true);
@@ -858,7 +1271,7 @@
           body.append(row);
         }
         const settings = state.provider_schedules.find((s) => s.provider === group.provider);
-        const zone = settings?.timezone || "UTC";
+        const zone = settings?.timezone ?? "UTC";
         const count = (group.key_ids || []).length;
         for (const field of ["name", "provider", "refresh_date", "cycle"]) {
           const input = row.querySelector(`[name=${field}]`);
@@ -867,7 +1280,10 @@
         }
         setText(row.querySelector(".key-count"), `${count} 个关联账号`);
         setProp(row.querySelector(".provider-hint"), "hidden", !count);
-        setText(row.querySelector(".refresh-zone"), `${zone} · ${settings?.cutoff || ""} 截止`);
+        setText(
+          row.querySelector(".refresh-zone"),
+          `${zoneLabel(zone)} · ${settings?.cutoff || ""} 截止`,
+        );
         setText(
           row.querySelector(".balance"),
           group.balance !== undefined && group.balance !== null && group.balance !== "unknown"
@@ -910,8 +1326,8 @@
           group.last_result || "尚未探测；未查询真实余额。",
         );
         setText(row.querySelector(".probe"), group.busy ? "正在探测…" : "已到账，立即重试");
-        for (const button of row.querySelectorAll("button"))
-          setProp(button, "disabled", policyBusy || !!group.busy);
+        for (const button of row.querySelectorAll("button:not(.recovery-info)"))
+          setProp(button, "disabled", policyBusy || accountBusy || assigning() || !!group.busy);
         const stats = row.querySelector(".stats");
         setProp(stats, "hidden", !count);
         setAttr(
@@ -937,10 +1353,24 @@
           option.value = group.id;
           select.append(option);
         }
-        setText(option, group.name || "未命名账号组");
+        setText(option, (group.name || "未命名账号组") + (group.pending ? "（待保存）" : ""));
+        setProp(option, "disabled", !!group.pending);
       }
       for (const option of remaining.values()) option.remove();
       setProp(select, "value", selected);
+    }
+    function accountMessage(text, error = false) {
+      setText($("#account-message"), text);
+      setProp($("#account-message"), "className", error ? "error" : "");
+    }
+    function availableGroups() {
+      const persisted = savedPolicy?.accounts || [];
+      return [
+        ...persisted.map((g) => ({ ...g, pending: !state.accounts.some((a) => a.id === g.id) })),
+        ...state.accounts
+          .filter((g) => !persisted.some((a) => a.id === g.id))
+          .map((g) => ({ ...g, pending: true })),
+      ];
     }
     function updateKeys() {
       const body = $("#key-assignments tbody");
@@ -950,18 +1380,14 @@
           row,
         ]),
       );
+      const groups = availableGroups();
       let count = 0;
       for (const provider of ["openai", "anthropic"]) {
         const keys = [...(state.keys[provider] || [])];
-        for (const group of state.accounts.filter((a) => a.provider === provider))
+        for (const group of (savedPolicy?.accounts || []).filter((a) => a.provider === provider))
           for (const id of group.key_ids || []) {
             if (!keys.some((k) => k.id === id))
-              keys.push({
-                id,
-                name: "已从 Bifrost 删除的账号",
-                enabled: false,
-                missing: true,
-              });
+              keys.push({ id, name: "已从 Bifrost 删除的账号", enabled: false, missing: true });
           }
         for (const key of keys) {
           count++;
@@ -972,20 +1398,41 @@
             row = rowFrom("#key-row");
             row.dataset.provider = provider;
             row.dataset.keyId = key.id;
-            row.querySelector("select").onchange = (event) => {
+            row.querySelector("select").onchange = async (event) => {
+              if (assigning()) return;
               collect();
-              for (const group of state.accounts.filter((a) => a.provider === provider))
-                group.key_ids = (group.key_ids || []).filter((id) => id !== key.id);
-              const chosen = state.accounts.find(
-                (a) => a.id === event.target.value && a.provider === provider,
-              );
-              if (chosen) chosen.key_ids.push(key.id);
+              const select = event.target,
+                groupID = select.value;
+              select.dataset.pending = "1";
               render();
-              message("账号关联将在保存后生效。");
+              try {
+                const value = await api("/api/ltsp/assignments", "PUT", {
+                  provider,
+                  key_id: key.id,
+                  group_id: groupID,
+                });
+                acceptSaved(value, "none");
+                accountMessage("账号归属已保存。");
+              } catch (error) {
+                accountMessage(error.message, true);
+              } finally {
+                delete select.dataset.pending;
+                render();
+              }
             };
+            row.querySelector("select").onpointerdown = (event) => {
+              if (assigning()) event.preventDefault();
+            };
+            row.querySelector("select").onkeydown = (event) => {
+              if (assigning() && event.key !== "Tab" && event.key !== "Escape")
+                event.preventDefault();
+            };
+            row.querySelector(".edit-account").onclick = () => openAccount(provider, key.id);
+            row.querySelector(".delete-account").onclick = () =>
+              openDeleteAccount(provider, key.id);
             body.append(row);
           }
-          const owner = state.accounts.find(
+          const owner = (savedPolicy?.accounts || []).find(
             (a) => a.provider === provider && (a.key_ids || []).includes(key.id),
           );
           setText(row.querySelector(".key-name"), key.name || key.id);
@@ -999,16 +1446,23 @@
           setAttr(select, "aria-label", "所属账号组：" + (key.name || key.id));
           updateGroupChoices(
             select,
-            state.accounts.filter(
-              (a) => a.provider === provider && (!key.missing || a.id === owner?.id),
-            ),
-            owner?.id || "",
+            groups.filter((a) => a.provider === provider && (!key.missing || a.id === owner?.id)),
+            select.dataset.pending ? select.value : owner?.id || "",
           );
-          setProp(select, "disabled", policyBusy);
+          setProp(select, "disabled", policyBusy || accountBusy);
+          setAttr(select, "aria-busy", String(!!select.dataset.pending));
+          setAttr(select, "aria-disabled", String(policyBusy || accountBusy || assigning()));
+          for (const button of row.querySelectorAll("button"))
+            setProp(button, "disabled", policyBusy || accountBusy || assigning() || !!key.missing);
         }
       }
       for (const row of remaining.values()) row.remove();
       setProp($("#keys-empty"), "hidden", count > 0);
+      setProp(
+        $("#add-native-account"),
+        "disabled",
+        savedPolicy === null || policyBusy || accountBusy || assigning(),
+      );
     }
     function updateProviders() {
       const body = $("#provider-settings tbody");
@@ -1023,38 +1477,77 @@
           row = rowFrom("#provider-row");
           row.dataset.provider = provider;
           setText(row.querySelector(".provider-name"), providerName(provider));
+          const changed = (timing) => {
+            collect();
+            if (timing)
+              for (const group of state.accounts.filter((a) => a.provider === provider))
+                delete group.retry_start;
+            render();
+          };
           for (const [field, label] of [
-            ["timezone", "时区"],
+            ["timezone", "地区时区"],
             ["cutoff", "刷新截止时间"],
             ["probe_model", "探测模型"],
           ]) {
             const input = row.querySelector(`[name=${field}]`);
             setAttr(input, "aria-label", providerName(provider) + " " + label);
-            input.onchange = () => {
+            input.onchange = () => changed(field !== "probe_model");
+            input.oninput = () => {
               collect();
-              if (field !== "probe_model")
-                for (const group of state.accounts.filter((a) => a.provider === provider))
-                  delete group.retry_start;
-              render();
-              message("有未保存的上游配置。");
+              updateDirty();
             };
+          }
+          const hour = row.querySelector("[name=gmt_hour]");
+          const hours = [
+            ...Array.from({ length: 12 }, (_, i) => "-" + String(12 - i).padStart(2, "0")),
+            "-00",
+            ...Array.from({ length: 15 }, (_, i) => "+" + String(i).padStart(2, "0")),
+          ];
+          for (const value of hours) {
+            const option = document.createElement("option");
+            option.value = value;
+            setText(option, value);
+            hour.append(option);
+          }
+          for (const [field, label] of [
+            ["timezone_mode", "时区类型"],
+            ["gmt_hour", "GMT 小时"],
+            ["gmt_minute", "GMT 分钟"],
+          ]) {
+            const select = row.querySelector(`[name=${field}]`);
+            setAttr(select, "aria-label", providerName(provider) + " " + label);
+            select.onchange = () => changed(true);
           }
           body.append(row);
         }
-        for (const field of ["timezone", "cutoff", "probe_model"]) {
-          const input = row.querySelector(`[name=${field}]`);
-          setProp(input, "value", settings[field] || "");
-          setProp(input, "disabled", policyBusy);
+        const mode = row.querySelector("[name=timezone_mode]"),
+          region = row.querySelector("[name=timezone]"),
+          fixed = fixedTimezone(settings.timezone);
+        if (!fixed || (mode.value === "region" && region.value !== settings.timezone))
+          setProp(mode, "value", fixed ? "fixed" : "region");
+        const regional = mode.value === "region";
+        setProp(row.querySelector(".gmt-offset"), "hidden", regional);
+        setProp(region, "hidden", !regional);
+        if (regional) setProp(region, "value", settings.timezone || "");
+        if (fixed) {
+          setProp(row.querySelector("[name=gmt_hour]"), "value", fixed.hour);
+          setProp(row.querySelector("[name=gmt_minute]"), "value", fixed.minute);
         }
+        const edge = ["+14", "-12"].includes(row.querySelector("[name=gmt_hour]").value);
+        setProp(row.querySelector('[name=gmt_minute] option[value="30"]'), "disabled", edge);
+        for (const field of ["cutoff", "probe_model"])
+          setProp(row.querySelector(`[name=${field}]`), "value", settings[field] || "");
+        for (const input of row.querySelectorAll("input,select"))
+          setProp(input, "disabled", policyBusy);
       }
       for (const row of remaining.values()) row.remove();
     }
     function render() {
-      setProp($("#add"), "disabled", policyBusy);
-      setProp($("#save"), "disabled", policyBusy);
+      setProp($("#add"), "disabled", policyBusy || accountBusy || assigning());
       updateGroups();
       updateKeys();
       updateProviders();
+      updateDirty();
     }
     function lockPolicy() {
       render();
@@ -1073,24 +1566,150 @@
       });
       render();
     };
-    $("#save").onclick = async () => {
+    async function saveScope(scope) {
       collect();
+      if (!dirty(scope)) return;
       policyBusy = true;
-      lockPolicy();
+      render();
       try {
-        state = await api("/api/ltsp/accounts", "PUT", payload());
-        message("配置已保存。");
-      } catch (e) {
-        message(e.message, true);
+        const data = payload();
+        const body =
+          scope === "groups"
+            ? { accounts: data.accounts.map(({ key_ids, ...group }) => group) }
+            : { provider_schedules: data.provider_schedules };
+        acceptSaved(await api("/api/ltsp/accounts", "PUT", body), scope);
+        message(scope === "groups" ? "账号组配置已保存。" : "上游配置已保存。");
+      } catch (error) {
+        message(error.message, true);
       } finally {
         policyBusy = false;
         render();
-        loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
+      }
+    }
+    $("#save").onclick = () => saveScope("groups");
+    $("#save-provider").onclick = () => saveScope("providers");
+    function openAccount(provider = "openai", id = "") {
+      collect();
+      const key = (state.keys[provider] || []).find((k) => k.id === id);
+      const dialog = $("#account-dialog");
+      dialog.dataset.provider = provider;
+      dialog.dataset.keyId = id;
+      setText($("#account-dialog-title"), id ? "编辑账号" : "添加账号");
+      setProp($("#account-provider"), "value", provider);
+      setProp($("#account-provider"), "disabled", !!id);
+      setProp($("#account-name"), "value", key?.name || "");
+      setProp($("#account-secret"), "value", "");
+      setProp($("#account-secret"), "required", !id);
+      setAttr($("#account-secret"), "placeholder", id ? "留空保留原 Key" : "填写 API key");
+      setProp($("#account-enabled"), "checked", key?.enabled ?? true);
+      setText($("#account-error"), "");
+      dialog.showModal();
+    }
+    $("#add-native-account").onclick = () => openAccount();
+    $("#account-cancel").onclick = () => $("#account-dialog").close();
+    $("#account-dialog").onclose = () => setProp($("#account-secret"), "value", "");
+    $("#account-dialog").oncancel = (event) => {
+      if (accountBusy) event.preventDefault();
+    };
+    $("#delete-account-dialog").oncancel = (event) => {
+      if (accountBusy) event.preventDefault();
+    };
+    $("#account-form").onsubmit = async (event) => {
+      event.preventDefault();
+      const dialog = $("#account-dialog"),
+        id = dialog.dataset.keyId,
+        provider = $("#account-provider").value;
+      const body = {
+        name: $("#account-name").value.trim(),
+        enabled: $("#account-enabled").checked,
+      };
+      const secret = $("#account-secret").value.trim();
+      if (secret) body.value = secret;
+      accountBusy = true;
+      setProp($("#account-submit"), "disabled", true);
+      setProp($("#account-cancel"), "disabled", true);
+      setText($("#account-submit"), "正在保存…");
+      render();
+      try {
+        const path = "/api/providers/" + encodeURIComponent(provider) + "/keys";
+        if (id) await api(path + "/" + encodeURIComponent(id), "PUT", body);
+        else {
+          Object.assign(body, { models: ["*"], weight: 1 });
+          try {
+            await api(path, "POST", body);
+          } catch (error) {
+            if (error.status !== 404 || !error.message.includes("Provider not found")) throw error;
+            try {
+              await api("/api/providers", "POST", { provider });
+            } catch (createError) {
+              if (createError.status !== 409) throw createError;
+            }
+            await api(path, "POST", body);
+          }
+        }
+        acceptSaved(await api("/api/ltsp/accounts"), "none");
+        dialog.close();
+        accountMessage(id ? "账号已更新。" : "账号已添加。");
+      } catch (error) {
+        setText($("#account-error"), error.message);
+      } finally {
+        accountBusy = false;
+        setProp($("#account-submit"), "disabled", false);
+        setProp($("#account-cancel"), "disabled", false);
+        setText($("#account-submit"), "保存账号");
+        render();
+      }
+    };
+    function openDeleteAccount(provider, id) {
+      collect();
+      const key = (state.keys[provider] || []).find((k) => k.id === id);
+      const dialog = $("#delete-account-dialog");
+      dialog.dataset.provider = provider;
+      dialog.dataset.keyId = id;
+      setText($("#delete-account-name"), key?.name || id);
+      setText($("#delete-account-error"), "");
+      dialog.showModal();
+    }
+    $("#cancel-delete-account").onclick = () => $("#delete-account-dialog").close();
+    $("#confirm-delete-account").onclick = async () => {
+      const dialog = $("#delete-account-dialog"),
+        provider = dialog.dataset.provider,
+        id = dialog.dataset.keyId;
+      accountBusy = true;
+      setProp($("#confirm-delete-account"), "disabled", true);
+      setProp($("#cancel-delete-account"), "disabled", true);
+      setText($("#confirm-delete-account"), "正在删除…");
+      render();
+      let deleted = false;
+      try {
+        await api(
+          "/api/providers/" + encodeURIComponent(provider) + "/keys/" + encodeURIComponent(id),
+          "DELETE",
+        );
+        deleted = true;
+        await api("/api/ltsp/assignments", "PUT", { provider, key_id: id, group_id: "" });
+        acceptSaved(await api("/api/ltsp/accounts"), "none");
+        dialog.close();
+        accountMessage("账号已删除。");
+      } catch (error) {
+        if (deleted) {
+          dialog.close();
+          accountMessage("账号已删除；解除关联未完成：" + error.message, true);
+          try {
+            acceptSaved(await api("/api/ltsp/accounts"), "none");
+          } catch {}
+        } else setText($("#delete-account-error"), error.message);
+      } finally {
+        accountBusy = false;
+        setProp($("#confirm-delete-account"), "disabled", false);
+        setProp($("#cancel-delete-account"), "disabled", false);
+        setText($("#confirm-delete-account"), "删除账号");
+        render();
       }
     };
     api("/api/ltsp/accounts")
       .then((v) => {
-        state = v;
+        acceptSaved(v);
         render();
         loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
       })

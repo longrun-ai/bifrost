@@ -103,6 +103,9 @@ class Upstream(http.server.BaseHTTPRequestHandler):
                 self.send_json(200,response)
             return
         base = {"id": "chatcmpl_fixture", "created": 0, "model": b["model"]}
+        if self.path.endswith("/completions") and not self.path.endswith("/chat/completions"):
+            self.send_json(200,{**base,"object":"text_completion","choices":[{"index":0,"text":"ok","finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":2,"total_tokens":14}})
+            return
         if b.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -272,6 +275,38 @@ def run(binary, evidence):
                     assert status == 200, (status, raw[:400])
                     return raw
 
+                # Homepage CRUD uses native key APIs; partial section saves and
+                # immediate association must preserve unrelated native settings.
+                temporary="00000000-0000-4000-8000-000000000006"
+                path="/api/providers/openai/keys/"+temporary
+                status,raw=request(url+"/api/providers/openai/keys",{"id":temporary,"name":"temporary","value":"fixture-temporary","models":["*"],"weight":7,"enabled":True})
+                assert status==200,(status,raw[:300])
+                assert request(url+"/api/ltsp/assignments",{"provider":"openai","key_id":temporary,"group_id":"account-c"},method="PUT")[0]==400
+                assert request(url+"/api/ltsp/assignments",{"provider":"openai","key_id":temporary,"group_id":"account-a"},method="PUT")[0]==200
+                prefs=json.loads(request(url+"/api/ltsp/accounts")[1])["provider_schedules"]
+                prefs[0]["timezone"]="GMT+05:30"
+                assert request(url+"/api/ltsp/accounts",{"provider_schedules":prefs},method="PUT")[0]==200
+                group_edit=[{k:v for k,v in a.items() if k!="key_ids"} for a in accounts]
+                group_edit[0]["name"]="A edited"
+                assert request(url+"/api/ltsp/accounts",{"accounts":group_edit},method="PUT")[0]==200
+                saved=json.loads(request(url+"/api/ltsp/accounts")[1])
+                assert temporary in saved["accounts"][0]["key_ids"] and saved["provider_schedules"][0]["timezone"]=="GMT+05:30"
+                assert request(url+path,{"name":"temporary-renamed","enabled":False},method="PUT")[0]==200
+                redacted=request(url+path)[1]
+                assert b"fixture-temporary" not in redacted
+                meta=json.loads(redacted)
+                assert meta["weight"]==7 and meta["models"]==["*"] and not meta["enabled"]
+                assert request(url+path,{"enabled":True},method="PUT")[0]==200
+                inference({"x-bf-api-key-id":temporary})
+                assert Upstream.calls[-1]["key"]=="fixture-temporary","omitted value replaced native secret"
+                assert request(url+path,{"value":"fixture-temporary-new"},method="PUT")[0]==200
+                inference({"x-bf-api-key-id":temporary})
+                assert Upstream.calls[-1]["key"]=="fixture-temporary-new"
+                assert request(url+path,method="DELETE")[0]==200
+                assert request(url+"/api/ltsp/assignments",{"provider":"openai","key_id":temporary,"group_id":""},method="PUT")[0]==200
+                assert request(url+path)[0]==404
+                assert request(url+"/api/ltsp/accounts",{"accounts":accounts,"provider_schedules":schedules},method="PUT")[0]==200
+
                 # Same source IP uses one native key; explicit sessions still pass through.
                 start = len(Upstream.calls)
                 for _ in range(4):
@@ -284,6 +319,8 @@ def run(binary, evidence):
                     assert len(Upstream.calls)==before,"unauthorized request reached upstream"
                 inference(body={**payload,"model":"gpt-6.1-sol"},path="/openai/chat/completions")
                 inference(body={"model":"gpt-6.1-sol","input":"Hi"}, path="/openai/responses")
+                classic=json.loads(inference(body={"model":"gpt-6.1-sol","prompt":"Reply OK.","max_tokens":16},path="/openai/completions"))
+                assert classic["choices"][0]["text"]=="ok"
                 inference({"x-bf-session-id": "native-user-session"})
                 assert b'"ok"' in inference(body={**payload, "stream": True})
                 assert Proxy.connections > 0, "gateway did not use fixed proxy"
@@ -411,7 +448,7 @@ def run(binary, evidence):
                 else:
                     raise AssertionError("native usage/session metadata was not recorded")
                 (evidence / "result.json").write_text(json.dumps({"passed": True, "inference_calls": len(Upstream.calls),
-                    "proxy_connections": Proxy.connections, "checks": ["required upstream timezone/cutoff and per-group balances", "same-provider group assignment", "catalog model discovery/replacement/persistence", "HTTP forwarding", "SSE", "fixed proxy", "IP/native session affinity",
+                    "proxy_connections": Proxy.connections, "checks": ["native key CRUD and secret/weight/model preservation", "independent section saves and immediate assignment", "fixed GMT half-hour offsets", "required upstream timezone/cutoff and per-group balances", "same-provider group assignment", "catalog model discovery/replacement/persistence", "Responses/Chat/Text forwarding", "SSE", "fixed proxy", "IP/native session affinity",
                     "12h default/30m explicit", "account hold", "healthy pool fallback", "immediate single probe", "native usage without prompt content", "required native virtual key", "generated/custom rotation and old-key rejection", "auth/key persistence"]}, indent=2))
                 print("Bifrost real-binary local-upstream integration passed")
             finally:

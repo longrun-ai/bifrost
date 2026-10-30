@@ -37,12 +37,17 @@ test.beforeEach(async ({ page }) => {
 
 test("LTSP account editor reports the immediate funding probe", async ({ page }) => {
   let accounts: unknown[] = [];
+  let providerSchedules = structuredClone(schedules);
   await page.route("**/api/ltsp/accounts", async (route) => {
-    if (route.request().method() === "PUT") accounts = route.request().postDataJSON().accounts;
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON();
+      if (body.accounts) accounts = body.accounts;
+      if (body.provider_schedules) providerSchedules = body.provider_schedules;
+    }
     await route.fulfill({
       json: {
         accounts,
-        provider_schedules: schedules,
+        provider_schedules: providerSchedules,
         keys: { openai: [], anthropic: [] },
         timezone: "UTC",
         access_key_name: "ltsp-lan-clients",
@@ -65,6 +70,10 @@ test("LTSP account editor reports the immediate funding probe", async ({ page })
   await page.getByRole("button", { name: "添加账号组" }).click();
   await page.getByLabel("账号组名称").fill("Trial");
   await page.getByLabel("OpenAI 探测模型", { exact: true }).fill("gpt-6.1-sol");
+  await page.locator("#save").click();
+  await expect(page.locator("#dirty-dot")).toBeHidden();
+  await page.locator("#save-provider").click();
+  await expect(page.locator("#provider-dirty-dot")).toBeHidden();
   await page.getByRole("button", { name: "已到账，立即重试" }).click();
   await probeStarted;
   await expect(page.getByRole("button", { name: "正在探测…" })).toBeDisabled();
@@ -116,6 +125,8 @@ test("LTSP home explains client setup and keeps the account form open", async ({
   ).toBeTruthy();
   const secure = await page.evaluate(() => window.isSecureContext);
   if (secure) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await expect(page.locator("#openai-example")).toBeHidden();
+  await page.locator("#openai-python summary").click();
   await page.locator('[data-copy="openai-example"]').click();
   await expect(page.locator('[data-copy="openai-example"]')).toHaveText("已复制");
   if (secure)
@@ -161,6 +172,7 @@ test("LTSP home rotates and replaces the client key without discarding the accou
   await expect(page.locator("#downstream-key")).toHaveValue(custom);
   await page.getByRole("button", { name: "显示", exact: true }).click();
   await expect(page.locator("#openai-example")).toContainText(custom);
+  await page.locator("#openai-python summary").click();
   const secure = await page.evaluate(() => window.isSecureContext);
   if (secure) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.locator('[data-copy="openai-example"]').click();
@@ -193,9 +205,25 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
   await page.route("**/api/ltsp/accounts", async (route) => {
     if (route.request().method() === "PUT") {
       const body = route.request().postDataJSON();
-      accounts = body.accounts;
-      providerSchedules = body.provider_schedules;
+      if (body.accounts) accounts = body.accounts;
+      if (body.provider_schedules) providerSchedules = body.provider_schedules;
     }
+    await route.fulfill({
+      json: {
+        accounts,
+        provider_schedules: providerSchedules,
+        access_key_name: "ltsp-lan-clients",
+        keys: {
+          openai: [{ id: "o-key", name: "OpenAI account", enabled: true }],
+          anthropic: [{ id: "c-key", name: "Claude account", enabled: true }],
+        },
+      },
+    });
+  });
+  await page.route("**/api/ltsp/assignments", async (route) => {
+    const body = route.request().postDataJSON();
+    for (const group of accounts) group.key_ids = group.key_ids.filter((id) => id !== body.key_id);
+    accounts.find((g) => g.id === body.group_id)?.key_ids.push(body.key_id);
     await route.fulfill({
       json: {
         accounts,
@@ -221,11 +249,12 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
   ]);
   await openai.selectOption("o-group");
   await expect(groups.locator('[data-id="o-group"] select[name=provider]')).toBeDisabled();
-  await page.getByLabel("OpenAI 时区", { exact: true }).fill("America/Los_Angeles");
+  await page.getByLabel("OpenAI 时区类型", { exact: true }).selectOption("region");
+  await page.getByLabel("OpenAI 地区时区", { exact: true }).fill("America/Los_Angeles");
   await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("20:30");
   await page.getByLabel("OpenAI 探测模型", { exact: true }).fill("preferred-model");
-  await page.getByRole("button", { name: "保存配置", exact: true }).click();
-  await expect(page.locator("#message")).toHaveText("配置已保存。");
+  await page.locator("#save-provider").click();
+  await expect(page.locator("#message")).toHaveText("上游配置已保存。");
   expect(accounts[0].key_ids).toEqual(["o-key"]);
   expect(accounts[1].key_ids).toEqual([]);
   expect(providerSchedules[0]).toMatchObject({
@@ -234,8 +263,8 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
     probe_model: "preferred-model",
   });
   await page.getByLabel("所属账号组：OpenAI account").selectOption("");
-  await page.getByRole("button", { name: "保存配置", exact: true }).click();
-  await expect(page.locator("#message")).toHaveText("配置已保存。");
+  await expect(page.locator("#account-message")).toHaveText("账号归属已保存。");
+  await expect(page.getByLabel("所属账号组：OpenAI account")).toHaveValue("");
   expect(accounts[0].key_ids).toEqual([]);
   await expect(groups.locator('[data-id="o-group"] select[name=provider]')).toBeEnabled();
 });
@@ -281,7 +310,7 @@ test("LTSP probe refreshes the shared provider model discovered by the gateway",
     "working-catalog-model",
   );
   await expect(page.getByRole("button", { name: "添加账号组", exact: true })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "保存配置", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "保存配置", exact: true })).toBeDisabled();
 });
 
 test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll", async ({
@@ -304,7 +333,13 @@ test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll
   });
   await page.route("**/api/ltsp/accounts", async (route) => {
     if (route.request().method() === "PUT") {
-      accounts = route.request().postDataJSON().accounts;
+      accounts = route
+        .request()
+        .postDataJSON()
+        .accounts.map((a: (typeof accounts)[number]) => ({
+          ...a,
+          key_ids: accounts.find((old) => old.id === a.id)?.key_ids || [],
+        }));
       saveStarted?.();
       await new Promise<void>((resolve) => {
         releaseSave = resolve;
@@ -319,8 +354,21 @@ test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll
       },
     });
   });
+  await page.route("**/api/ltsp/assignments", async (route) => {
+    const body = route.request().postDataJSON();
+    accounts[0].key_ids = body.group_id ? [body.key_id] : [];
+    await route.fulfill({
+      json: {
+        accounts,
+        provider_schedules: schedules,
+        access_key_name: "ltsp-lan-clients",
+        keys: { openai: [{ id: "o-key", name: "OpenAI account", enabled: true }] },
+      },
+    });
+  });
   await page.setViewportSize({ width: 900, height: 700 });
   await page.goto("/");
+  await page.getByLabel("账号组名称").fill("Edited group");
   const assignment = page.getByLabel("所属账号组：OpenAI account", { exact: true });
   await assignment.focus();
   const stable = await page.evaluateHandle(() => {
@@ -367,7 +415,7 @@ test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll
     saved.scrollY = window.scrollY;
   });
   releaseSave?.();
-  await expect(page.locator("#message")).toHaveText("配置已保存。");
+  await expect(page.locator("#message")).toHaveText("账号组配置已保存。");
   const result = await stable.evaluate((saved) => ({
     sameInput: saved.input === document.querySelector("#accounts input[name=name]"),
     sameGroup: saved.group === document.querySelector('#accounts tr[data-id="o-group"]'),
@@ -391,4 +439,243 @@ test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll
     structuralChanges: [],
   });
   await stable.evaluate((saved) => saved.observer.disconnect());
+});
+
+test("LTSP compact controls keep examples folded, details floating and dirty state reversible", async ({
+  page,
+}) => {
+  let group = {
+    id: "g",
+    name: "Group",
+    provider: "openai",
+    key_ids: [],
+    refresh_date: "2026-10-30",
+    cycle: "monthly",
+    retry_start: "2026-10-30T20:00:00Z",
+    retry_end: "2026-11-01T20:00:00Z",
+  };
+  let prefs = structuredClone(schedules),
+    fail = false;
+  await page.route("**/api/ltsp/accounts", async (route) => {
+    if (route.request().method() === "PUT") {
+      if (fail) {
+        await route.fulfill({ status: 500, json: { error: "fixture write failed" } });
+        return;
+      }
+      const body = route.request().postDataJSON();
+      if (body.accounts) group = { ...group, ...body.accounts[0] };
+      if (body.provider_schedules) prefs = body.provider_schedules;
+    }
+    await route.fulfill({
+      json: {
+        accounts: [group],
+        keys: {},
+        provider_schedules: prefs,
+        access_key_name: "ltsp-lan-clients",
+      },
+    });
+  });
+  await page.goto("/");
+  await expect(page.getByText("OpenAI 兼容客户端 Base URL", { exact: true })).toBeVisible();
+  await expect(page.locator("#openai-example")).toBeHidden();
+  await expect(page.locator("#anthropic-example")).toBeHidden();
+  await page.locator("#openai-python summary").click();
+  await expect(page.locator("#openai-python")).toContainText("/chat/completions");
+  expect(
+    await page
+      .locator("#account-groups")
+      .evaluate((el) => el.contains(document.querySelector("#save"))),
+  ).toBeTruthy();
+  expect(
+    await page
+      .locator("#native-accounts")
+      .getByRole("button", { name: "保存配置", exact: true })
+      .count(),
+  ).toBe(0);
+  expect(
+    await page
+      .locator("#add")
+      .evaluate(
+        (el) =>
+          !!(
+            document.querySelector("#accounts")!.compareDocumentPosition(el) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+          ),
+      ),
+  ).toBeTruthy();
+  const row = page.locator('#accounts tr[data-id="g"]');
+  const height = (await row.boundingBox())!.height;
+  await expect(row.getByRole("tooltip")).toBeHidden();
+  await row.getByRole("button", { name: "查看重试详情" }).hover();
+  await expect(row.getByRole("tooltip")).toBeVisible();
+  await expect(row.getByRole("tooltip")).toContainText("2026/10/30");
+  expect((await row.boundingBox())!.height).toBe(height);
+  expect((await row.getByRole("button", { name: "删除账号组" }).innerText()).trim()).toBe("");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#dirty-dot")).toBeHidden();
+  await page.getByLabel("账号组名称").fill("Draft");
+  await expect(page.locator("#dirty-dot")).toBeVisible();
+  await page.getByLabel("账号组名称").fill("Group");
+  await expect(page.locator("#dirty-dot")).toBeHidden();
+  await page.getByLabel("OpenAI GMT 小时", { exact: true }).selectOption("+05");
+  await page.getByLabel("OpenAI GMT 分钟", { exact: true }).selectOption("30");
+  await expect(page.locator("#provider-dirty-dot")).toBeVisible();
+  await page.locator("#save-provider").click();
+  await expect(page.locator("#provider-dirty-dot")).toBeHidden();
+  expect(prefs[0].timezone).toBe("GMT+05:30");
+  await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
+  await page.getByLabel("账号组名称").fill("Write failure draft");
+  fail = true;
+  await page.locator("#save").click();
+  await expect(page.locator("#message")).toContainText("fixture write failed");
+  await expect(page.locator("#dirty-dot")).toBeVisible();
+  await expect(page.getByLabel("账号组名称")).toHaveValue("Write failure draft");
+});
+
+test("LTSP native account CRUD saves immediately while preserving policy drafts", async ({
+  page,
+}) => {
+  type Key = {
+    id: string;
+    name: string;
+    value: string;
+    enabled: boolean;
+    models: string[];
+    weight: number;
+  };
+  let groups = [
+    {
+      id: "g",
+      name: "Group",
+      provider: "openai",
+      key_ids: ["k"],
+      refresh_date: "2026-10-30",
+      cycle: "monthly",
+    },
+  ];
+  let prefs = structuredClone(schedules),
+    nextID = 1,
+    failDelete = false;
+  const keys: Record<string, Key[]> = {
+    openai: [
+      {
+        id: "k",
+        name: "Original account",
+        value: "fixture-old-secret",
+        enabled: true,
+        models: ["restricted"],
+        weight: 7,
+      },
+    ],
+    anthropic: [],
+  };
+  const providers = new Set(["openai"]);
+  const writes: Array<{ method: string; body: Record<string, unknown> }> = [];
+  const view = () => ({
+    accounts: groups,
+    provider_schedules: prefs,
+    keys: Object.fromEntries(
+      Object.entries(keys).map(([p, list]) => [
+        p,
+        list.map(({ id, name, enabled }) => ({ id, name, enabled })),
+      ]),
+    ),
+    access_key_name: "ltsp-lan-clients",
+  });
+  await page.route("**/api/ltsp/accounts", async (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON();
+      if (body.accounts)
+        groups = body.accounts.map((a: (typeof groups)[number]) => ({
+          ...a,
+          key_ids: groups.find((g) => g.id === a.id)?.key_ids || [],
+        }));
+      if (body.provider_schedules) prefs = body.provider_schedules;
+    }
+    await route.fulfill({ json: view() });
+  });
+  await page.route("**/api/ltsp/assignments", async (route) => {
+    const body = route.request().postDataJSON();
+    for (const group of groups) group.key_ids = group.key_ids.filter((id) => id !== body.key_id);
+    groups.find((g) => g.id === body.group_id)?.key_ids.push(body.key_id);
+    await route.fulfill({ json: view() });
+  });
+  await page.route("**/api/providers", async (route) => {
+    providers.add(route.request().postDataJSON().provider);
+    await route.fulfill({ json: {} });
+  });
+  await page.route("**/api/providers/*/keys**", async (route) => {
+    const parts = new URL(route.request().url()).pathname.split("/"),
+      provider = parts[3],
+      id = parts[5],
+      method = route.request().method();
+    if (!providers.has(provider)) {
+      await route.fulfill({ status: 404, json: { error: { message: "Provider not found" } } });
+      return;
+    }
+    if (method === "DELETE") {
+      if (failDelete) {
+        await route.fulfill({ status: 500, json: { error: { message: "delete failed" } } });
+        return;
+      }
+      keys[provider] = keys[provider].filter((k) => k.id !== id);
+    } else {
+      const body = route.request().postDataJSON();
+      writes.push({ method, body });
+      if (method === "POST") keys[provider].push({ ...body, id: "new-" + nextID++ });
+      else Object.assign(keys[provider].find((k) => k.id === id)!, body);
+    }
+    await route.fulfill({ json: {} });
+  });
+  await page.goto("/");
+  await page.getByLabel("账号组名称").fill("Group draft");
+  await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("21:00");
+  await page.locator('[data-key-id="k"] .edit-account').click();
+  await page.getByLabel("账号名称", { exact: true }).fill("Renamed account");
+  await page.getByLabel("启用", { exact: true }).uncheck();
+  await page.getByRole("button", { name: "保存账号", exact: true }).click();
+  await expect(page.locator("#account-dialog")).not.toBeVisible();
+  expect(writes[0].body).not.toHaveProperty("value");
+  expect(keys.openai[0]).toMatchObject({
+    name: "Renamed account",
+    value: "fixture-old-secret",
+    enabled: false,
+    models: ["restricted"],
+    weight: 7,
+  });
+  await expect(page.getByLabel("账号组名称")).toHaveValue("Group draft");
+  await expect(page.getByLabel("OpenAI 刷新截止时间", { exact: true })).toHaveValue("21:00");
+  await expect(page.locator("#dirty-dot")).toBeVisible();
+  await expect(page.locator("#provider-dirty-dot")).toBeVisible();
+  await page.locator('[data-key-id="k"] .edit-account').click();
+  await page.getByLabel("API key", { exact: true }).fill("fixture-new-secret");
+  await page.getByRole("button", { name: "保存账号", exact: true }).click();
+  await expect(page.locator("#account-dialog")).not.toBeVisible();
+  expect(keys.openai[0].value).toBe("fixture-new-secret");
+  await page.getByRole("button", { name: "添加账号", exact: true }).click();
+  await page.getByLabel("上游", { exact: true }).selectOption("anthropic");
+  await page.getByLabel("账号名称", { exact: true }).fill("New Claude account");
+  await page.getByLabel("API key", { exact: true }).fill("fixture-claude-secret");
+  await page.getByRole("button", { name: "保存账号", exact: true }).click();
+  await expect(page.locator("#account-dialog")).not.toBeVisible();
+  await expect(page.getByLabel("所属账号组：New Claude account")).toHaveValue("");
+  await page.locator('[data-key-id="k"] .delete-account').click();
+  await page.locator("#confirm-delete-account").click();
+  await expect(page.locator("#delete-account-dialog")).not.toBeVisible();
+  await expect(page.locator('#key-assignments tr[data-key-id="k"]')).toHaveCount(0);
+  expect(groups[0].key_ids).toEqual([]);
+  await expect(page.getByLabel("账号组名称")).toHaveValue("Group draft");
+  failDelete = true;
+  await page.locator('[data-key-id="new-1"] .delete-account').click();
+  await page.locator("#confirm-delete-account").click();
+  await expect(page.locator("#delete-account-error")).toContainText("delete failed");
+  expect(keys.anthropic).toHaveLength(1);
+  await page.locator("#cancel-delete-account").click();
+  await page.locator("#save").click();
+  await expect(page.locator("#dirty-dot")).toBeHidden();
+  expect(prefs[0].cutoff).toBe("20:00");
+  await expect(page.locator("#provider-dirty-dot")).toBeVisible();
+  await page.locator("#save-provider").click();
+  await expect(page.locator("#provider-dirty-dot")).toBeHidden();
+  expect(prefs[0].cutoff).toBe("21:00");
 });

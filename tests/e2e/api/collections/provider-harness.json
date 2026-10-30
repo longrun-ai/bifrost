@@ -277031,6 +277031,132 @@
           ]
         }
       ]
+    },
+    {
+      "name": "LTSP compact account management",
+      "description": "LAN mode: folded examples, scoped policy saves and native account controls. Invalid updates must fail without changing configuration; native key CRUD, independent saves, GMT offsets and draft preservation are covered by the isolated binary and browser fixtures.",
+      "item": [
+        {
+          "name": "LTSP compact OpenAI Anthropic home controls",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Home includes folded examples and scoped account controls', function () {",
+                  "  pm.expect(pm.response.code,pm.response.text()).to.equal(200);",
+                  "  var html=pm.response.text();",
+                  "  ['id=\"openai-python\"','id=\"anthropic-python\"','id=\"add-native-account\"','id=\"account-dialog\"','id=\"provider-dirty-dot\"','id=\"dirty-dot\"','/chat/completions','/responses','/completions'].forEach(function (s) { pm.expect(html).to.include(s); });",
+                  "  pm.expect(html).to.match(/<details[^>]*id=\"openai-python\"[^>]*>/);",
+                  "  pm.expect(html.match(/<details[^>]*id=\"openai-python\"[^>]*>/)[0]).not.to.match(/\\sopen(?:\\s|>|=)/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LTSP compact OpenAI Anthropic empty partial save [EXPECT-400]",
+          "request": {
+            "method": "PUT",
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/ltsp/accounts",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Empty update cannot erase either policy section', function () { pm.expect(pm.response.code,pm.response.text()).to.equal(400); pm.expect(pm.response.json().error).to.equal('没有可保存的配置'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LTSP compact OpenAI missing group assignment [EXPECT-400]",
+          "request": {
+            "method": "PUT",
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/ltsp/assignments",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider\":\"openai\",\"key_id\":\"ltsp-harness-missing\",\"group_id\":\"ltsp-harness-nonexistent-{{$guid}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Assignment requires an existing saved group', function () { pm.expect(pm.response.code,pm.response.text()).to.equal(400); pm.expect(pm.response.json().error).to.equal('请先保存账号组，再关联账号'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LTSP compact OpenAI Anthropic GMT range validation [EXPECT-400]",
+          "request": {
+            "method": "PUT",
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{baseUrl}}/api/ltsp/accounts",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"provider_schedules\":[{\"provider\":\"openai\",\"timezone\":\"GMT+14:30\",\"cutoff\":\"20:00\",\"probe_model\":\"\"},{\"provider\":\"anthropic\",\"timezone\":\"UTC\",\"cutoff\":\"20:00\",\"probe_model\":\"\"}]}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Out-of-range GMT offset fails without saving', function () { pm.expect(pm.response.code,pm.response.text()).to.equal(400); pm.expect(pm.response.json().error).to.include('时区'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

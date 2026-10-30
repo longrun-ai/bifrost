@@ -16,14 +16,19 @@ Missing session IDs receive source-IP affinity. Account policy runs at the real
 provider attempt boundary, so a held sibling key cannot bypass a shared balance.
 Only explicit upstream credit exhaustion pauses an account; generic quota, rate,
 auth and network errors do not establish exhaustion. Each provider has a required
-IANA timezone and local refresh cutoff (defaults: UTC, 20:00). A group's editable
+timezone and local refresh cutoff (defaults: UTC, 20:00). The home offers a signed
+GMT hour plus :00/:30 offset, or an IANA region for DST and other offsets.
+A group's editable
 monthly/annual date combines with that cutoff to open a 48-hour real-traffic
 recovery window, with increasing backoff. Month-end anchors clamp without drift;
 elapsed hours include timezone/DST rules. There is no background probe worker.
 
 `/` and `/ltsp/accounts` serve the account home, with client connection examples
 derived from the current origin. Management and per-account statistics links
-open separate tabs so an unsaved account form stays in place. Downstream inference
+open separate tabs so an unsaved account form stays in place. Python examples are
+collapsed initially. The OpenAI base URL supports Responses, Chat Completions and
+legacy Text Completions, subject to the selected model's supported operations.
+Downstream inference
 requires a native Virtual Key; missing, dummy and retired keys are rejected.
 The home manages the uniquely named `ltsp-lan-clients` key in the native encrypted
 store, reveals it on request, and copies examples with its current value. Generated
@@ -36,14 +41,25 @@ that deliberately accesses the management API.
 
 The home separates account groups, native Bifrost accounts (API key references),
 and provider settings into tables. Each native account's optional group dropdown
-only lists groups from the same provider; the API also rejects cross-provider
-assignments. Balance placeholders belong to individual groups. No balance is
+only lists saved groups from the same provider; the API also rejects cross-provider
+assignments. The native account table adds, edits and deletes keys through native
+provider APIs. A blank key on edit retains its secret, model rules and weight;
+the page never fetches the provider secret. Association changes persist immediately
+through `/api/ltsp/assignments`, independently of policy drafts. A failed delete
+keeps the account; failed association cleanup after an actual delete is reported
+as partial completion. There is no extra credential store.
+Group and provider tables have separately scoped save buttons with dirty red dots.
+Partial policy updates preserve the other section and current key associations
+under the manager lock. Native key operations preserve both sections' local drafts.
+Recovery details use a floating hover/focus panel; adding a group is below the list.
+Balance placeholders belong to individual groups. No balance is
 invented from usage costs. A provider's probe model is optional. When absent, or
 when an explicit model-not-supported verdict invalidates it, the funding button
 tries eligible catalog text models in random order, at most once each, until one
 succeeds. That model is remembered in the same provider configuration. Credit,
 authentication, rate-limit, network and unrelated parameter errors stop the search.
 The whole button operation is bounded to 45 seconds and one reservation per group.
+Unsaved policy changes must be saved before pressing the probe button.
 Tables reconcile existing rows and choices by stable group/key/provider IDs.
 Unchanged fields are not written; ordinary edits, saving and probe results preserve
 DOM identity, focus, selection, expansion and scroll. Only new/deleted data items
@@ -81,7 +97,9 @@ proxy/provider fixture. It covers unary/streaming, both providers, request cache
 defaults and explicit policies, affinity, exhaustion/fallback, immediate probes,
 encrypted key registration persistence, statistics and content exclusion. It also
 covers provider cutoff defaults, same-provider grouping, per-group balances, catalog
-discovery and replacement of an unsupported preferred model across process restart.
+discovery and replacement of an unsupported preferred model across process restart,
+native key CRUD with unchanged secret/model/weight fields, immediate assignment,
+independent partial saves and fixed GMT offsets.
 Credit exhaustion tests use this fixture because a live harness cannot safely
 create a real billing exhaustion condition. Live harness cases cover the
 Responses wire surfaces; the operator chooses whether to spend real credits.
