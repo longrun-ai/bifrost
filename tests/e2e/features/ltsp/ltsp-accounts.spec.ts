@@ -99,6 +99,9 @@ test("LTSP home explains client setup and keeps the account form open", async ({
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
       'base_url="' + origin + '/openai"',
     );
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect((await page.locator("#downstream-key").boundingBox())?.width).toBeGreaterThan(240);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 
 test("LTSP home rotates and replaces the client key without discarding the account form", async ({

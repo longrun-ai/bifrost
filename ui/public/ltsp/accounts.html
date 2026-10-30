@@ -170,6 +170,14 @@
 			flex: 1;
 			overflow-wrap: anywhere;
 		}
+		#access-controls {
+			flex-wrap: wrap;
+		}
+		#downstream-key {
+			flex: 1 1 240px;
+			min-width: 0;
+			margin-top: 0;
+		}
 		.copy-line button {
 			flex-shrink: 0;
 			padding: 5px 10px;
@@ -247,7 +255,7 @@
 			</div>
 			<p>把客户端的 API 地址指向本网关，并填写下面的接入 Key。只填写地址或使用 dummy-api-key 将无法调用。</p>
 			<label for="downstream-key">客户端接入 Key</label>
-			<div class="copy-line">
+			<div class="copy-line" id="access-controls">
 				<input id="downstream-key" type="password" readonly autocomplete="off" placeholder="正在读取…" /><button
 					type="button"
 					class="secondary"
