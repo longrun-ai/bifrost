@@ -38,6 +38,9 @@ func NewSessionHandler(configStore configstore.ConfigStore, wsTicketStore *WSTic
 // SetSetupLock tells the handler the OSS setup-lock gate is installed, so is-auth-enabled
 // reports setup_required / setup_token_configured and ws-ticket issues setup-token tickets.
 func (h *SessionHandler) SetSetupLock(m *AuthMiddleware) {
+	if lib.LTSP != nil {
+		return
+	}
 	h.setupLock = m
 }
 

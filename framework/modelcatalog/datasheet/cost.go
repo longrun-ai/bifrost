@@ -905,6 +905,16 @@ func extractTranscriptionUsage(u *schemas.TranscriptionUsage) (*schemas.BifrostL
 // It returns a per-category cost breakdown; TotalCost equals the sum of every
 // component so callers that only need the total can read that field. Returns
 // nil when usage is nil.
+func openAITTLWriteCounts(usage *schemas.BifrostLLMUsage, remaining int) (int, int) {
+	if usage.PromptTokensDetails == nil || usage.PromptTokensDetails.CachedWriteTokenDetails == nil {
+		return 0, 0
+	}
+	d := usage.PromptTokensDetails.CachedWriteTokenDetails
+	long := min(max(d.TTL12hTokens, 0), max(remaining, 0))
+	short := min(max(d.TTL30mTokens, 0), max(remaining-long, 0))
+	return short, long
+}
+
 func computeTextCost(pricing *configstoreTables.TableModelPricing, usage *schemas.BifrostLLMUsage, tier serviceTier) *schemas.BifrostCost {
 	if usage == nil {
 		return nil
@@ -962,7 +972,9 @@ func computeTextCost(pricing *configstoreTables.TableModelPricing, usage *schema
 		if cachedWriteTokensAbove1hr > 0 {
 			cacheWriteCost += float64(cachedWriteTokensAbove1hr) * cacheCreationInputAbove1hrInputRate
 		}
-		cacheWriteCost += float64(cachedWriteTokens-cachedWriteTokensAbove1hr) * cacheCreationInputRate
+		remaining := cachedWriteTokens - cachedWriteTokensAbove1hr
+		ttl30m, ttl12h := openAITTLWriteCounts(usage, remaining)
+		cacheWriteCost += float64(remaining-ttl30m-ttl12h)*cacheCreationInputRate + float64(ttl30m)*inputRate*1.25 + float64(ttl12h)*inputRate*2.5
 	}
 
 	textOutputCost := float64(completionTokens) * outputRate
@@ -1141,10 +1153,11 @@ func computeBatchTextCost(pricing *configstoreTables.TableModelPricing, usage *s
 			}
 		}
 
+		ttl30m, ttl12h := openAITTLWriteCounts(usage, cachedWriteTokens-cachedWriteTokensAbove1hr)
 		nonCachedPrompt := promptTokens - cachedReadTokens - cachedWriteTokens
 		inputCost = float64(nonCachedPrompt)*inputRate +
 			float64(cachedReadTokens)*cacheReadRate +
-			float64(cachedWriteTokens-cachedWriteTokensAbove1hr)*cacheWriteRate +
+			float64(cachedWriteTokens-cachedWriteTokensAbove1hr-ttl30m-ttl12h)*cacheWriteRate + float64(ttl30m)*inputRate*1.25 + float64(ttl12h)*inputRate*2.5 +
 			float64(cachedWriteTokensAbove1hr)*cacheWriteAbove1hrRate
 	}
 

@@ -2748,6 +2748,9 @@ func (s *BifrostHTTPServer) virtualKeyCache() handlers.VirtualKeyCache {
 
 // RegisterInferenceRoutes initializes the routes for the inference handler
 func (s *BifrostHTTPServer) RegisterInferenceRoutes(ctx context.Context, middlewares ...schemas.BifrostHTTPMiddleware) error {
+	if lib.LTSP != nil {
+		middlewares = append([]schemas.BifrostHTTPMiddleware{lib.LTSP.Defaults}, middlewares...)
+	}
 	// Initialize WebSocket pool and handler before integrations so it can be wired through
 	s.wsPool = bfws.NewPool(s.Config.WebSocketConfig.Pool)
 	wsResponsesHandler := handlers.NewWSResponsesHandler(s.Client, s.Config, s.wsPool)
@@ -2833,6 +2836,9 @@ func (s *BifrostHTTPServer) notificationPublisher() schemas.NotificationPublishe
 
 // RegisterAPIRoutes initializes the routes for the Bifrost HTTP server.
 func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks ServerCallbacks, middlewares ...schemas.BifrostHTTPMiddleware) error {
+	if lib.LTSP != nil {
+		lib.LTSP.Register(s.Router, middlewares...)
+	}
 	var err error
 	// Initializing plugin specific handlers
 	var loggingHandler *handlers.LoggingHandler
@@ -3362,6 +3368,9 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	// Initialize bifrost client
 	// Create account backed by the high-performance store (all processing is done in LoadFromDatabase)
 	// The account interface now benefits from ultra-fast config access times via in-memory storage
+	if err := s.initLTSP(); err != nil {
+		return err
+	}
 	account := lib.NewBaseAccount(s.Config)
 	s.Client, err = bifrost.Init(ctx, schemas.BifrostConfig{
 		Account:            account,

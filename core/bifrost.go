@@ -7044,6 +7044,45 @@ func executeRequestWithRetries[T any](
 	req *schemas.BifrostRequest,
 	logger schemas.Logger,
 ) (result T, bifrostError *schemas.BifrostError) {
+	if policy := config.KeyPolicy; policy != nil && policy.SingleAttempt(ctx) {
+		copyConfig := *config
+		copyConfig.NetworkConfig.MaxRetries = 0
+		config = &copyConfig
+	}
+	var pendingKey *schemas.Key
+	if policy := config.KeyPolicy; policy != nil && keyProvider != nil {
+		selector := keyProvider
+		keyProvider = func(used, dead map[string]bool) (schemas.Key, error) {
+			denied := make(map[string]bool, len(dead))
+			for id, v := range dead {
+				denied[id] = v
+			}
+			blocked := false
+			for {
+				key, err := selector(used, denied)
+				if err != nil {
+					if blocked {
+						return schemas.Key{}, errAllKeysFiltered
+					}
+					return key, err
+				}
+				if denied[key.ID] {
+					return schemas.Key{}, errAllKeysFiltered
+				}
+				if policy.Begin(ctx, providerKey, key) {
+					pendingKey = &key
+					return key, nil
+				}
+				blocked = true
+				denied[key.ID] = true
+			}
+		}
+		defer func() {
+			if pendingKey != nil {
+				policy.End(ctx, providerKey, *pendingKey, &schemas.BifrostError{IsBifrostError: true, Error: &schemas.ErrorField{Message: "request ended before provider attempt settled"}})
+			}
+		}()
+	}
 	var attempts int
 	isStreamRequest := IsStreamRequestType(requestType)
 
@@ -7503,6 +7542,10 @@ func executeRequestWithRetries[T any](
 		}
 		if attemptAbort != nil {
 			bifrostError = settleAttemptAbort(ctx, attemptAbort, bifrostError, providerKey, model)
+		}
+		if config.KeyPolicy != nil && pendingKey != nil {
+			config.KeyPolicy.End(ctx, providerKey, *pendingKey, bifrostError)
+			pendingKey = nil
 		}
 
 		// Check if result is a streaming channel - if so, defer span completion

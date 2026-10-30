@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/maximhq/bifrost/transports/v2/bifrost-http/ltsp"
 	"strconv"
 	"strings"
 	"time"
@@ -860,6 +861,12 @@ func ConvertToBifrostContext(ctx *fasthttp.RequestCtx, store HandlerStore) (*sch
 	// session.id trace attribute in agreement.
 	if sessionID := ResolveSessionIDFromHeaders(allHeaders); sessionID != "" {
 		bifrostCtx.SetValue(schemas.BifrostContextKeySessionID, sessionID)
+	} else if LTSP != nil {
+		ltsp.IPSession(ctx, bifrostCtx)
+	}
+
+	if LTSP != nil {
+		LTSP.AttachProbe(ctx, bifrostCtx)
 	}
 
 	// Collect all request query params for downstream use (e.g., governance routing CEL rules

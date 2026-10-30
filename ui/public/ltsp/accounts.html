@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-CN">
+	<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>API 账号 · LTSP 网关</title>
+	<style>
+		:root {
+			color-scheme: light dark;
+			font:
+				15px/1.6 system-ui,
+				sans-serif;
+			background: #f5f6fa;
+			color: #182438;
+		}
+		* {
+			box-sizing: border-box;
+		}
+		body {
+			margin: 0;
+		}
+		main {
+			max-width: 1100px;
+			margin: 40px auto;
+			padding: 0 24px;
+		}
+		nav {
+			display: flex;
+			gap: 24px;
+			flex-wrap: wrap;
+		}
+		a {
+			color: #315ac8;
+		}
+		h1 {
+			font-size: 28px;
+			margin: 24px 0 4px;
+		}
+		p {
+			color: #56647a;
+		}
+		.bar {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 20px;
+			flex-wrap: wrap;
+		}
+		.card {
+			background: white;
+			border: 1px solid #dce1eb;
+			border-radius: 14px;
+			padding: 24px;
+			margin: 20px 0;
+		}
+		.grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+			gap: 18px;
+		}
+		label {
+			display: block;
+			font-weight: 600;
+		}
+		input,
+		select,
+		button {
+			font: inherit;
+			border: 1px solid #c5cedd;
+			border-radius: 7px;
+			padding: 9px 11px;
+		}
+		input,
+		select {
+			display: block;
+			width: 100%;
+			margin-top: 5px;
+			background: transparent;
+			color: inherit;
+		}
+		button {
+			cursor: pointer;
+			background: #315ac8;
+			color: white;
+			border-color: #315ac8;
+		}
+		button.secondary {
+			background: transparent;
+			color: #315ac8;
+		}
+		button.danger {
+			background: transparent;
+			color: #a52e3e;
+			border-color: #a52e3e;
+		}
+		button:disabled {
+			cursor: wait;
+			opacity: 0.55;
+		}
+		.keys {
+			margin: 18px 0;
+			padding: 12px;
+			background: #f5f6fa;
+			border-radius: 8px;
+		}
+		.keys label {
+			font-weight: 400;
+			display: flex;
+			gap: 10px;
+			align-items: center;
+		}
+		.keys input {
+			width: auto;
+			margin: 0;
+		}
+		.status {
+			font-weight: 600;
+		}
+		.hold {
+			color: #a65516;
+		}
+		.ok {
+			color: #267847;
+		}
+		small {
+			color: #64748b;
+		}
+		#message {
+			white-space: pre-wrap;
+			min-height: 24px;
+		}
+		#message.error {
+			color: #a52e3e;
+		}
+		.actions {
+			display: flex;
+			gap: 12px;
+			flex-wrap: wrap;
+			margin-top: 18px;
+		}
+		.empty {
+			padding: 40px;
+			text-align: center;
+		}
+		.badge {
+			border: 1px solid #dce1eb;
+			padding: 3px 10px;
+			border-radius: 20px;
+		}
+		footer {
+			margin: 28px 0;
+			color: #64748b;
+			font-size: 13px;
+		}
+		@media (prefers-color-scheme: dark) {
+			:root {
+				background: #121923;
+				color: #e0e6f2;
+			}
+			.card {
+				background: #1a2432;
+				border-color: #394458;
+			}
+			.keys {
+				background: #121923;
+			}
+			p,
+			small,
+			footer {
+				color: #a0aec3;
+			}
+			a,
+			button.secondary {
+				color: #9bb6ff;
+			}
+		}
+	</style>
+	<main>
+		<nav>
+			<a href="/workspace/dashboard">调用统计</a><a href="/workspace/providers">API key 管理</a><a href="/workspace/logs">请求记录</a>
+		</nav>
+		<div class="bar">
+			<div>
+				<h1>上游账号</h1>
+				<p>账号池与额度恢复 · <span id="zone"></span></p>
+			</div>
+			<span class="badge">真实余额：未知</span>
+		</div>
+		<p>
+			先在 <a href="/workspace/providers">API key 管理</a> 录入密钥，再把同一个上游账号／组织的 key 归入同组。<br />刷新日及前后一天允许真实请求重试，失败后逐步延长回避时间。日期本身不会恢复账号。
+		</p>
+		<div class="bar">
+			<div id="message" role="status" aria-live="polite"></div>
+			<div class="actions">
+				<button id="add" data-testid="ltsp-account-add" class="secondary" disabled>添加账号组</button
+				><button id="save" data-testid="ltsp-account-save" disabled>保存配置</button>
+			</div>
+		</div>
+		<div id="accounts"></div>
+		<footer>
+			“已到账，立即重试”会立即发送一次普通 API 调用，产生少量用量并记入统计。每个账号需配置其支持的探测模型；已手动禁用的 key
+			不会被启用。代理固定使用本机网段的 VNP gateway client。
+		</footer>
+	</main>
+	<script>
+		let state = { accounts: [], keys: {} };
+		const $ = (s) => document.querySelector(s);
+		const esc = (s) =>
+			String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+		const format = (s) => (s && !s.startsWith("0001-") ? new Date(s).toLocaleString() : "—");
+		function message(s, error = false) {
+			$("#message").textContent = s;
+			$("#message").className = error ? "error" : "";
+		}
+		async function api(path, method = "GET", body) {
+			const r = await fetch(path, {
+				method,
+				headers: { "Content-Type": "application/json" },
+				body: body === undefined ? undefined : JSON.stringify(body),
+			});
+			const v = await r.json();
+			if (!r.ok) throw Error(v.error || `HTTP ${r.status}`);
+			return v;
+		}
+		function collect() {
+			for (const c of document.querySelectorAll(".card[data-id]")) {
+				const a = state.accounts.find((a) => a.id === c.dataset.id);
+				for (const field of ["name", "provider", "refresh_date", "cycle", "probe_model"])
+					a[field] = c.querySelector(`[name=${field}]`).value;
+				a.key_ids = Array.from(c.querySelectorAll("[name=key]:checked"), (x) => x.value);
+			}
+		}
+		function render() {
+			$("#zone").textContent = state.timezone || "";
+			$("#accounts").innerHTML = state.accounts.length
+				? ""
+				: '<div class="card empty">暂无账号组。录入 API key 后，添加账号组以启用额度耗尽暂停与恢复。</div>';
+			for (const a of state.accounts) {
+				const c = document.createElement("section");
+				c.className = "card";
+				c.dataset.id = a.id;
+				c.innerHTML = `<div class="bar"><strong>${esc(a.name || "新账号组")}</strong><span class="status ${a.exhausted ? "hold" : "ok"}">${a.busy ? "正在探测…" : a.exhausted ? "余额不足，已暂停" : "可参与转发"}</span></div><div class="grid"><label>账号名称<input name="name" maxlength="200" value="${esc(a.name)}"></label><label>上游<select name="provider"><option value="openai" ${a.provider === "openai" ? "selected" : ""}>OpenAI</option><option value="anthropic" ${a.provider === "anthropic" ? "selected" : ""}>Anthropic</option></select></label><label>刷新日期<input name="refresh_date" type="date" value="${esc(a.refresh_date)}"></label><label>周期<select name="cycle"><option value="monthly" ${a.cycle === "monthly" ? "selected" : ""}>每月</option><option value="annual" ${a.cycle === "annual" ? "selected" : ""}>每年</option></select></label><label>探测模型<input name="probe_model" placeholder="填写该账号可用的模型 ID" value="${esc(a.probe_model)}"></label></div><div class="keys"><strong>该账号的 API keys</strong>${(state.keys[a.provider] || []).map((k) => `<label><input type="checkbox" name="key" value="${esc(k.id)}" ${(a.key_ids || []).includes(k.id) ? "checked" : ""}>${esc(k.name || k.id)} ${k.enabled ? "" : "（已手动禁用）"}</label>`).join("") || "<p>该上游尚无已录入的 API key。</p>"}</div><small>最近探测：${esc(format(a.last_checked))} · 下次允许重试：${esc(format(a.next_retry))}<br>${esc(a.last_result || "尚未探测；此状态不代表余额已查询。")}</small><div class="actions"><button class="probe" ${a.busy ? "disabled" : ""}>已到账，立即重试</button><button class="remove danger" ${a.busy ? "disabled" : ""}>删除账号组</button></div>`;
+				if ((a.key_ids || []).length) {
+					const stats = document.createElement("a");
+					stats.textContent = "查看该账号调用统计";
+					stats.href = "/workspace/dashboard?selected_key_ids=" + encodeURIComponent(a.key_ids.join(","));
+					c.querySelector(".actions").prepend(stats);
+				}
+				c.querySelector("[name=provider]").onchange = () => {
+					collect();
+					a.key_ids = [];
+					render();
+				};
+				c.querySelector(".remove").onclick = () => {
+					collect();
+					state.accounts = state.accounts.filter((v) => v.id !== a.id);
+					render();
+					message("删除将在保存后生效。");
+				};
+				c.querySelector(".probe").onclick = async () => {
+					collect();
+					const b = c.querySelector(".probe");
+					b.disabled = true;
+					b.textContent = "正在探测…";
+					message("正在保存配置并立即探测…");
+					try {
+						state = await api("/api/ltsp/accounts", "PUT", { accounts: state.accounts });
+						const r = await api("/api/ltsp/accounts/" + encodeURIComponent(a.id) + "/probe", "POST", {});
+						state = await api("/api/ltsp/accounts");
+						render();
+						message(r.result, !r.recovered);
+					} catch (e) {
+						message(e.message, true);
+						b.disabled = false;
+						b.textContent = "已到账，立即重试";
+					}
+				};
+				$("#accounts").append(c);
+			}
+		}
+		$("#add").onclick = () => {
+			collect();
+			state.accounts.push({
+				id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2),
+				name: "",
+				provider: "openai",
+				key_ids: [],
+				refresh_date: new Date().toLocaleDateString("en-CA"),
+				cycle: "monthly",
+				probe_model: "",
+			});
+			render();
+		};
+		$("#save").onclick = async () => {
+			collect();
+			$("#save").disabled = true;
+			try {
+				state = await api("/api/ltsp/accounts", "PUT", { accounts: state.accounts });
+				render();
+				message("配置已保存。");
+			} catch (e) {
+				message(e.message, true);
+			} finally {
+				$("#save").disabled = false;
+			}
+		};
+		api("/api/ltsp/accounts")
+			.then((v) => {
+				state = v;
+				render();
+				$("#add").disabled = false;
+				$("#save").disabled = false;
+			})
+			.catch((e) => message("配置读取失败，请刷新页面重试：" + e.message, true));
+	</script>
+</html>

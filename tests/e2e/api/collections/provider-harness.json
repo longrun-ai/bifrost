@@ -276696,6 +276696,111 @@
           }
         }
       ]
+    },
+    {
+      "name": "LTSP Responses cache policy",
+      "description": "Run with LTSP_GATEWAY_STATE enabled. Exercises default and explicit TTL through neutral and OpenAI SDK routes. Local tests/ltspgateway.py additionally asserts exact provider payloads, account holds and immediate single probes without paid billing exhaustion.",
+      "item": [
+        {
+          "name": "OpenAI gpt-5.6 LTSP Responses default 12h",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-5.6\",\"input\":\"Reply OK.\",\"max_output_tokens\":128}"
+            },
+            "url": "{{baseUrl}}/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('LTSP Responses returns usage', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.equal(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('usage');",
+                  "  pm.expect(body).to.have.property('output');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OpenAI gpt-5.6 LTSP Responses explicit 30m",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-5.6\",\"input\":\"Reply OK.\",\"max_output_tokens\":128,\"prompt_cache_options\":{\"ttl\":\"30m\"}}"
+            },
+            "url": "{{baseUrl}}/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('LTSP Responses returns usage', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.equal(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('usage');",
+                  "  pm.expect(body).to.have.property('output');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OpenAI gpt-5.6 LTSP Responses OpenAI SDK default",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"gpt-5.6\",\"input\":\"Reply OK.\",\"max_output_tokens\":128}"
+            },
+            "url": "{{baseUrl}}/openai/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('LTSP Responses returns usage', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.equal(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('usage');",
+                  "  pm.expect(body).to.have.property('output');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

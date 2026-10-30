@@ -2,6 +2,7 @@ package datasheet
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 
 	bifrost "github.com/maximhq/bifrost/core"
@@ -10,6 +11,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLTSPCacheWriteCostsUseLifetimeSplit(t *testing.T) {
+	p := &configstoreTables.TableModelPricing{InputCostPerToken: schemas.Ptr(1.0), OutputCostPerToken: schemas.Ptr(2.0), CacheReadInputTokenCost: schemas.Ptr(0.1), CacheCreationInputTokenCost: schemas.Ptr(1.25), InputCostPerTokenPriority: schemas.Ptr(2.0)}
+	u := &schemas.BifrostLLMUsage{PromptTokens: 20, CompletionTokens: 2, PromptTokensDetails: &schemas.ChatPromptTokensDetails{CachedReadTokens: 10, CachedWriteTokens: 8, CachedWriteTokenDetails: &schemas.ChatCachedWriteTokenDetails{TTL30mTokens: 3, TTL12hTokens: 5}}}
+	got := computeTextCost(p, u, serviceTier{})
+	want := 2.0 + 1.0 + 3*1.25 + 5*2.5 + 4
+	if math.Abs(got.TotalCost-want) > 1e-9 {
+		t.Fatalf("got %g want %g", got.TotalCost, want)
+	}
+	if got.InputCostDetails == nil || math.Abs(got.InputCostDetails.CachedWriteCost-(3*1.25+5*2.5)) > 1e-9 {
+		t.Fatal(got)
+	}
+}
 
 func TestCalculateCost_RealtimeTranscriptionPricingOverride(t *testing.T) {
 	pricing := configstoreTables.TableModelPricing{

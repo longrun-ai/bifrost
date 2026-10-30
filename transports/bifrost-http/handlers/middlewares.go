@@ -1843,7 +1843,7 @@ func (m *AuthMiddleware) HasSetupToken() bool {
 // registered by the OSS server only: enterprise builds its own chain around APIMiddleware and
 // never installs this gate.
 func (m *AuthMiddleware) SetupLockMiddleware() schemas.BifrostHTTPMiddleware {
-	if !m.IsDashboardAuthActive() {
+	if !m.IsDashboardAuthActive() && lib.LTSP == nil {
 		logger.Warn("================================================================")
 		if m.authConfig.Load() == nil {
 			logger.Warn("No admin account is configured for this Bifrost instance yet.")
@@ -1863,6 +1863,12 @@ func (m *AuthMiddleware) SetupLockMiddleware() schemas.BifrostHTTPMiddleware {
 	}
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
+			// Explicit LTSP LAN deployments intentionally have no login or setup
+			// credential. APIMiddleware still enforces the native origin policy.
+			if lib.LTSP != nil {
+				next(ctx)
+				return
+			}
 			if m.IsDashboardAuthActive() {
 				next(ctx)
 				return

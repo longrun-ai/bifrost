@@ -5,6 +5,7 @@ package lib
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/maximhq/bifrost/core/network"
@@ -82,6 +83,9 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelPr
 		return nil, err
 	}
 	providerConfig := &schemas.ProviderConfig{}
+	if LTSP != nil {
+		providerConfig.KeyPolicy = LTSP
+	}
 	if config.ProxyConfig != nil {
 		providerConfig.ProxyConfig = config.ProxyConfig
 	}
@@ -116,6 +120,9 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelPr
 	}
 	if config.InjectedTools != nil {
 		providerConfig.InjectedTools = config.InjectedTools
+	}
+	if LTSP != nil {
+		providerConfig.ProxyConfig = &schemas.ProxyConfig{Type: schemas.HTTPProxy, URL: schemas.NewSecretVar(os.Getenv("LTSP_GATEWAY_PROXY"))}
 	}
 	return providerConfig, nil
 }

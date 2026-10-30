@@ -639,7 +639,17 @@ func (cpc *CustomProviderConfig) IsOperationAllowed(operation RequestType) bool 
 // ProviderConfig represents the complete configuration for a provider.
 // An array of ProviderConfig needs to be provided in GetConfigForProvider
 // in your account interface implementation.
+// KeyAttemptPolicy gates actual upstream calls, including explicit pins and retries.
+// It is optional and in-memory; credentials and routing remain owned by Bifrost.
+type KeyAttemptPolicy interface {
+	Begin(*BifrostContext, ModelProvider, Key) bool
+	End(*BifrostContext, ModelProvider, Key, *BifrostError)
+	SingleAttempt(*BifrostContext) bool
+}
+
 type ProviderConfig struct {
+	KeyPolicy KeyAttemptPolicy `json:"-"`
+
 	NetworkConfig            NetworkConfig            `json:"network_config"`              // Network configuration
 	ConcurrencyAndBufferSize ConcurrencyAndBufferSize `json:"concurrency_and_buffer_size"` // Concurrency settings
 	// Logger instance, can be provided by the user or bifrost default logger is used if not provided

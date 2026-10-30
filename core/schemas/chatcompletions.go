@@ -2007,9 +2007,24 @@ type ChatPromptTokensDetails struct {
 	CachedWriteTokenDetails *ChatCachedWriteTokenDetails `json:"cached_write_token_details,omitempty"`
 }
 
+type OpenAICacheWriteTokenDetails struct {
+	TTL30mTokens int `json:"ttl_30m_tokens"`
+	TTL12hTokens int `json:"ttl_12h_tokens"`
+}
+
 type ChatCachedWriteTokenDetails struct {
+	TTL30mTokens        int `json:"ttl_30m_tokens,omitempty"`
+	TTL12hTokens        int `json:"ttl_12h_tokens,omitempty"`
 	CachedWriteTokens5m int `json:"cached_write_tokens_5m"`
 	CachedWriteTokens1h int `json:"cached_write_tokens_1h"`
+}
+
+// OpenAI reports TTL-specific cache writes separately from cached reads.
+func (d *ChatCachedWriteTokenDetails) OpenAIDetails() *OpenAICacheWriteTokenDetails {
+	if d == nil || (d.TTL30mTokens == 0 && d.TTL12hTokens == 0) {
+		return nil
+	}
+	return &OpenAICacheWriteTokenDetails{TTL30mTokens: d.TTL30mTokens, TTL12hTokens: d.TTL12hTokens}
 }
 
 // UnmarshalJSON maps OpenAI's cached_tokens into CachedReadTokens for compatibility.
@@ -2139,6 +2154,8 @@ func MergeBifrostLLMUsage(base, add *BifrostLLMUsage) *BifrostLLMUsage {
 			merged.PromptTokensDetails.CachedWriteTokenDetails = &ChatCachedWriteTokenDetails{
 				CachedWriteTokens5m: cachedWriteTokens5m(baseDetails) + cachedWriteTokens5m(addDetails),
 				CachedWriteTokens1h: cachedWriteTokens1h(baseDetails) + cachedWriteTokens1h(addDetails),
+				TTL30mTokens:        ttlWriteTokens(baseDetails, false) + ttlWriteTokens(addDetails, false),
+				TTL12hTokens:        ttlWriteTokens(baseDetails, true) + ttlWriteTokens(addDetails, true),
 			}
 		}
 	}
@@ -2208,6 +2225,16 @@ func (t *ToolUsage) DeepCopy() *ToolUsage {
 		c.WebSearch = &ws
 	}
 	return &c
+}
+
+func ttlWriteTokens(d *ChatPromptTokensDetails, long bool) int {
+	if d == nil || d.CachedWriteTokenDetails == nil {
+		return 0
+	}
+	if long {
+		return d.CachedWriteTokenDetails.TTL12hTokens
+	}
+	return d.CachedWriteTokenDetails.TTL30mTokens
 }
 
 func cachedWriteTokens5m(details *ChatPromptTokensDetails) int {
