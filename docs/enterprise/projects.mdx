@@ -191,6 +191,26 @@ A project opens up MCP access two ways, and both only ever add: where they overl
 
 Tool allowlists union within the project, and then compose with the caller's own MCP access through the project's access rule: `intersect` caps what the caller may execute while inside the project, `union` extends it.
 
+### Relays
+
+A project can grant [relays](/relays/overview), one by one, under **Relay access** in the project form, with `relay_grants` on [Update project](/api-reference/projects/update-project), or in `config.json` and Helm. A project with no relays grants none. The grants compose with the caller's own relay access through the project's access rule, the same way MCP access does. A refused call names the project, for example `Relay 'web-search' is not allowed for project 'q3-research'`.
+
+Where a relay call's cost lands follows the project's [accounting mode](#accounting-modes): the project's budgets, the caller's, or both. The project's detail view lists its relays on the **Relays** tab.
+
+```json
+{
+  "governance": {
+    "projects": [
+      {
+        "name": "q3-research",
+        "access_rule": "intersect",
+        "relay_grants": [{ "relay_name": "web-search" }]
+      }
+    ]
+  }
+}
+```
+
 ---
 
 ## Budgets, limits and splits

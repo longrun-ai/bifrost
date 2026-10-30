@@ -308,6 +308,27 @@ Under **Automatic key rotation**, pick **Every 7 / 30 / 90 days** or **Custom** 
 	only carry a list of allowed tools per server; "everything except X" can't be represented. List the tools you want instead.
 </Warning>
 
+### Configure relay access
+
+Under **Relays**, pick each [relay](/relays/overview) that holders of the profile may call at `/relay/<name>/...`. A profile with no relays allows none. Each call's cost is charged to the profile's budgets, like model usage — unless the call is scoped to an Enterprise [project](/enterprise/projects) with `accounting_mode: project_only`, in which case the project's budget answers for the call and the profile's budgets are not touched.
+
+A virtual key governed by the profile takes its relays from here, so the key's own relay grants are not used. A call the profile does not allow is refused with `403`, naming the profile: `Relay 'web-search' is not allowed for access profile 'contractors'`.
+
+In `config.json`, list the relays under `relay_grants` (in Helm, `bifrost.accessProfiles[].relay_grants`):
+
+```json
+{
+	"access_profiles": [
+		{
+			"name": "Research",
+			"relay_grants": [{ "relay_name": "web-search" }, { "relay_name": "translate" }]
+		}
+	]
+}
+```
+
+A profile that names a relay that does not exist is skipped as a whole, with a warning in the server log. Through the API, `relay_grants` on [Update access profile](/api-reference/access-profiles/update-access-profile) replaces the list; leave it out to keep the current grants, or send `[]` to remove them all.
+
 ### Assign the profile to users
 
 Click **Create**, then assign the profile in any of these ways. A user can hold profiles from all of them at once.
