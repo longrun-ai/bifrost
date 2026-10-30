@@ -150,6 +150,51 @@
 			color: #64748b;
 			font-size: 13px;
 		}
+		h2 {
+			margin: 0;
+			font-size: 21px;
+		}
+		.connection-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+			gap: 20px;
+			margin-top: 18px;
+		}
+		.copy-line {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-top: 8px;
+		}
+		.copy-line code {
+			flex: 1;
+			overflow-wrap: anywhere;
+		}
+		.copy-line button {
+			flex-shrink: 0;
+			padding: 5px 10px;
+		}
+		pre {
+			padding: 18px;
+			border-radius: 9px;
+			background: #f5f6fa;
+			overflow-x: auto;
+			font:
+				13px/1.7 ui-monospace,
+				monospace;
+		}
+		.key-note {
+			margin: 20px 0 0;
+			padding-top: 18px;
+			border-top: 1px solid #dce1eb;
+		}
+		details {
+			margin-top: 16px;
+		}
+		summary {
+			cursor: pointer;
+			color: #315ac8;
+		}
 		@media (prefers-color-scheme: dark) {
 			:root {
 				background: #121923;
@@ -161,6 +206,15 @@
 			}
 			.keys {
 				background: #121923;
+			}
+			pre {
+				background: #121923;
+			}
+			.key-note {
+				border-color: #394458;
+			}
+			summary {
+				color: #9bb6ff;
 			}
 			p,
 			small,
@@ -175,17 +229,62 @@
 	</style>
 	<main>
 		<nav>
-			<a href="/workspace/dashboard">调用统计</a><a href="/workspace/providers">API key 管理</a><a href="/workspace/logs">请求记录</a>
+			<a href="/workspace/dashboard" target="_blank" rel="noopener noreferrer">调用统计 ↗</a
+			><a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a
+			><a href="/workspace/logs" target="_blank" rel="noopener noreferrer">请求记录 ↗</a>
 		</nav>
 		<div class="bar">
 			<div>
-				<h1>上游账号</h1>
+				<h1>LAN API 网关</h1>
 				<p>账号池与额度恢复 · <span id="zone"></span></p>
 			</div>
 			<span class="badge">真实余额：未知</span>
 		</div>
+		<section class="card" aria-labelledby="client-config-title" data-testid="ltsp-client-config">
+			<div class="bar">
+				<h2 id="client-config-title">客户端接入</h2>
+				<span class="badge">下游免鉴权</span>
+			</div>
+			<p>把客户端的 API 地址指向本网关。厂商 API key 在管理页录入，客户端使用下面的占位值即可。</p>
+			<div class="connection-grid">
+				<div>
+					<strong>OpenAI 兼容客户端</strong>
+					<div class="copy-line">
+						<code id="openai-url"></code><button type="button" class="secondary" data-copy="openai-url">复制地址</button>
+					</div>
+					<pre id="openai-example"></pre>
+					<button type="button" class="secondary" data-copy="openai-example">复制 Python 配置</button>
+				</div>
+				<div>
+					<strong>Anthropic 客户端</strong>
+					<div class="copy-line">
+						<code id="anthropic-url"></code><button type="button" class="secondary" data-copy="anthropic-url">复制地址</button>
+					</div>
+					<pre id="anthropic-example"></pre>
+					<button type="button" class="secondary" data-copy="anthropic-example">复制 Python 配置</button>
+				</div>
+			</div>
+			<p class="key-note">
+				<code>dummy-api-key</code> 是 SDK 所需的非空占位值，不是秘密，也不是厂商
+				key。当前不校验这个值，无需设置或轮换；更换它不会限制客户端访问。真实的 OpenAI / Anthropic key 在
+				<a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a> 中录入和替换。
+			</p>
+			<details>
+				<summary>以后需要设置、轮换真正的客户端接入密钥？</summary>
+				<p>
+					Bifrost 的
+					<a href="/workspace/governance/virtual-keys" target="_blank" rel="noopener noreferrer">Virtual Keys ↗</a>
+					支持创建和轮换接入密钥。还需在
+					<a href="/workspace/config" target="_blank" rel="noopener noreferrer">设置 ↗</a> 中启用推理鉴权，客户端再改填实际的 Virtual
+					Key；管理页面是否登录是独立设置。目前保持下游免鉴权。
+				</p>
+			</details>
+			<small>示例只创建客户端。发起调用时，选择已录入 key 有权使用的模型 ID。以上管理链接均在新标签页打开。</small>
+		</section>
+		<h2>上游账号</h2>
 		<p>
-			先在 <a href="/workspace/providers">API key 管理</a> 录入密钥，再把同一个上游账号／组织的 key 归入同组。<br />刷新日及前后一天允许真实请求重试，失败后逐步延长回避时间。日期本身不会恢复账号。
+			先在 <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a> 录入密钥，再把同一个上游账号／组织的
+			key 归入同组。<br />刷新日及前后一天允许真实请求重试，失败后逐步延长回避时间。日期本身不会恢复账号。
 		</p>
 		<div class="bar">
 			<div id="message" role="status" aria-live="polite"></div>
@@ -203,6 +302,50 @@
 	<script>
 		let state = { accounts: [], keys: {} };
 		const $ = (s) => document.querySelector(s);
+		const origin = window.location.origin;
+		$("#openai-url").textContent = origin + "/openai";
+		$("#anthropic-url").textContent = origin + "/anthropic";
+		$("#openai-example").textContent =
+			`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${origin}/openai",\n    api_key="dummy-api-key",\n)`;
+		$("#anthropic-example").textContent =
+			`from anthropic import Anthropic\n\nclient = Anthropic(\n    base_url="${origin}/anthropic",\n    api_key="dummy-api-key",\n)`;
+		for (const button of document.querySelectorAll("[data-copy]"))
+			button.onclick = async () => {
+				const source = document.getElementById(button.dataset.copy);
+				let copied = false;
+				if (window.isSecureContext && navigator.clipboard) {
+					try {
+						await navigator.clipboard.writeText(source.textContent);
+						copied = true;
+					} catch {}
+				}
+				if (!copied) {
+					const input = document.createElement("textarea");
+					input.value = source.textContent;
+					input.readOnly = true;
+					input.style.cssText = "position:fixed;left:-9999px;top:0";
+					document.body.append(input);
+					input.select();
+					try {
+						copied = document.execCommand("copy");
+					} catch {}
+					input.remove();
+				}
+				const label = button.textContent;
+				if (copied) {
+					button.textContent = "已复制";
+					setTimeout(() => {
+						button.textContent = label;
+					}, 1800);
+				} else {
+					const range = document.createRange();
+					range.selectNodeContents(source);
+					const selection = window.getSelection();
+					selection.removeAllRanges();
+					selection.addRange(range);
+					button.textContent = "已选中，请按 Ctrl+C";
+				}
+			};
 		const esc = (s) =>
 			String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 		const format = (s) => (s && !s.startsWith("0001-") ? new Date(s).toLocaleString() : "—");
@@ -242,6 +385,8 @@
 					const stats = document.createElement("a");
 					stats.textContent = "查看该账号调用统计";
 					stats.href = "/workspace/dashboard?selected_key_ids=" + encodeURIComponent(a.key_ids.join(","));
+					stats.target = "_blank";
+					stats.rel = "noopener noreferrer";
 					c.querySelector(".actions").prepend(stats);
 				}
 				c.querySelector("[name=provider]").onchange = () => {

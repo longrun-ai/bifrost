@@ -218,6 +218,9 @@ def run(binary, evidence):
                 status,raw=request(url+"/api/session/is-auth-enabled")
                 auth=json.loads(raw)
                 assert status==200 and not auth.get("is_auth_enabled") and not auth.get("setup_required"),auth
+                status, home = request(url + "/")
+                assert status == 200 and "客户端接入" in home.decode(), "root did not serve the LTSP account home"
+                assert request(url + "/ltsp/accounts")[1] == home, "home alias differs from root"
                 for provider,cfg in provider_configs.items():
                     for key in cfg["keys"]:
                         status,raw=request(url+"/api/providers/"+provider+"/keys",key)
@@ -244,6 +247,9 @@ def run(binary, evidence):
                     inference()
                 assert len({c["key"] for c in Upstream.calls[start:]}) == 1, "IP affinity was not honored"
                 inference({"Authorization":"Bearer unused"})
+                for placeholder in ("dummy-api-key", "arbitrary-lan-placeholder"):
+                    inference({"Authorization":"Bearer "+placeholder}, body={**payload,"model":"gpt-6.1-sol"}, path="/openai/chat/completions")
+                inference({"Authorization":"Bearer dummy-api-key"}, body={"model":"gpt-6.1-sol","input":"Hi"}, path="/openai/responses")
                 inference({"x-bf-session-id": "native-user-session"})
                 assert b'"ok"' in inference(body={**payload, "stream": True})
                 assert Proxy.connections > 0, "gateway did not use fixed proxy"

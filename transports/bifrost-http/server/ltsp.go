@@ -7,13 +7,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/transports/v2/bifrost-http/lib"
 	"github.com/maximhq/bifrost/transports/v2/bifrost-http/ltsp"
-	"github.com/valyala/fasthttp"
 )
 
 func (s *BifrostHTTPServer) initLTSP() error {
@@ -95,9 +93,6 @@ func (s *BifrostHTTPServer) initLTSP() error {
 	}
 
 	lib.LTSP = m
-	s.ShellRewriter = func(_ *fasthttp.RequestCtx, b []byte) []byte {
-		link := `<a href="/ltsp/accounts" style="position:fixed;right:24px;bottom:20px;z-index:9999;background:#315ac8;color:white;border-radius:9px;padding:9px 14px;font:14px system-ui;text-decoration:none">账号与额度恢复</a>`
-		return []byte(strings.Replace(string(b), "</body>", link+"</body>", 1))
-	}
+	s.ShellRewriter = m.Shell
 	return nil
 }

@@ -56,6 +56,15 @@ func (m *Manager) AttachProbe(ctx *fasthttp.RequestCtx, target *schemas.BifrostC
 	}
 }
 
+// Shell serves the account home at the root without changing workspace routes.
+func (m *Manager) Shell(ctx *fasthttp.RequestCtx, body []byte) []byte {
+	if string(ctx.Path()) == "/" {
+		return m.AccountsPage
+	}
+	link := `<a href="/" target="_blank" rel="noopener noreferrer" style="position:fixed;right:24px;bottom:20px;z-index:9999;background:#315ac8;color:white;border-radius:9px;padding:9px 14px;font:14px system-ui;text-decoration:none">账号与客户端接入</a>`
+	return []byte(strings.Replace(string(body), "</body>", link+"</body>", 1))
+}
+
 func (m *Manager) Register(r *router.Router, middleware ...schemas.BifrostHTTPMiddleware) {
 	chain := func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 		for i := len(middleware) - 1; i >= 0; i-- {

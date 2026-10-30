@@ -276801,6 +276801,34 @@
           ]
         }
       ]
+    },
+    {
+      "name": "LTSP home page",
+      "description": "LTSP mode: account management is the default home with client connection instructions. This read-only case consumes no provider credits.",
+      "item": [
+        {
+          "name": "OpenAI Anthropic client instructions at LTSP home",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Account home includes client setup', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.equal(200);",
+                  "  pm.expect(pm.response.text()).to.include('客户端接入');",
+                  "  pm.expect(pm.response.text()).to.include('dummy-api-key');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

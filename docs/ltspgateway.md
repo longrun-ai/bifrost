@@ -19,7 +19,14 @@ auth and network errors do not establish exhaustion. The editable monthly or
 annual refresh date permits real-traffic recovery on the date and adjacent days,
 with increasing backoff. There is no background probe worker.
 
-`/ltsp/accounts` groups native keys and configures dates and probe models. Its
+`/` and `/ltsp/accounts` serve the account home, with client connection examples
+derived from the current origin. Management and per-account statistics links
+open separate tabs so an unsaved account form stays in place. The SDK's
+`dummy-api-key` is a non-secret placeholder while inference auth is disabled;
+actual provider credentials remain in native key management. Native Virtual
+Keys provide a separate opt-in path for real client authentication and rotation.
+
+The account home groups native keys and configures dates and probe models. Its
 funding button immediately sends one logged inference through the gateway's
 native HTTP admission pipeline, pinned to one enabled key without retry or
 fallback. A random, single-use, in-memory marker admits that one probe; it is

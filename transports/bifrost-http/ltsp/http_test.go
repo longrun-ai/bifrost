@@ -65,3 +65,29 @@ func TestAccountAPIOnlyReturnsKeyReferences(t *testing.T) {
 		t.Fatal(b)
 	}
 }
+
+func TestShellKeepsAccountHomeAndLinksSeparate(t *testing.T) {
+	m := manager(t)
+	m.AccountsPage = []byte("<html>account home</html>")
+	var req fasthttp.RequestCtx
+	req.Request.SetRequestURI("/")
+	if got := m.Shell(&req, []byte("<body>native dashboard</body>")); string(got) != string(m.AccountsPage) {
+		t.Fatal("root did not serve account home")
+	}
+	req.Request.SetRequestURI("/workspace/dashboard")
+	got := string(m.Shell(&req, []byte("<body>native dashboard</body>")))
+	if !strings.Contains(got, "native dashboard") || !strings.Contains(got, `href="/" target="_blank" rel="noopener noreferrer"`) {
+		t.Fatal("workspace page or separate home link was lost")
+	}
+}
+
+func BenchmarkHomeShell(b *testing.B) {
+	m := &Manager{AccountsPage: []byte("account home")}
+	var req fasthttp.RequestCtx
+	req.Request.SetRequestURI("/")
+	shell := []byte("<body>native dashboard</body>")
+	b.ReportAllocs()
+	for b.Loop() {
+		m.Shell(&req, shell)
+	}
+}
