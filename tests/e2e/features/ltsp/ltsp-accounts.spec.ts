@@ -784,7 +784,7 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
     id: "g",
     name: "Group",
     provider: "openai",
-    key_ids: [],
+    key_ids: ["k"],
     refresh_date: "2026-10-30",
     cycle: "monthly",
     retry_start: "2026-10-30T20:00:00Z",
@@ -805,7 +805,7 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
     await route.fulfill({
       json: {
         accounts: [group],
-        keys: {},
+        keys: { openai: [{ id: "k", name: "Key", enabled: true }] },
         provider_schedules: prefs,
         access_key_name: "ltsp-lan-clients",
       },
@@ -842,10 +842,27 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
   ).toBeTruthy();
   const row = page.locator('#accounts tr[data-id="g"]');
   const height = (await row.boundingBox())!.height;
-  await expect(row.getByRole("tooltip")).toBeHidden();
+  const providerInfo = row.getByRole("button", { name: "查看上游修改说明" });
+  const providerDetails = row.locator(".provider-details");
+  const recoveryDetails = row.locator(".recovery-details");
+  await expect(row.getByLabel("账号组上游")).toBeDisabled();
+  await expect(providerInfo).toBeEnabled();
+  await expect(providerDetails).toBeHidden();
+  await providerInfo.hover();
+  await expect(providerDetails).toHaveText("先解除 API Key 关联，再改上游");
+  await expect(providerDetails).toBeVisible();
+  expect((await row.boundingBox())!.height).toBe(height);
+  await page.mouse.move(0, 0);
+  await expect(providerDetails).toBeHidden();
+  await providerInfo.focus();
+  await expect(providerDetails).toBeVisible();
+  await expect(providerInfo).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(providerDetails).toBeHidden();
+  await expect(recoveryDetails).toBeHidden();
   await row.getByRole("button", { name: "查看重试详情" }).hover();
-  await expect(row.getByRole("tooltip")).toBeVisible();
-  await expect(row.getByRole("tooltip")).toContainText("2026/10/30");
+  await expect(recoveryDetails).toBeVisible();
+  await expect(recoveryDetails).toContainText("2026/10/30");
   expect((await row.boundingBox())!.height).toBe(height);
   expect((await row.getByRole("button", { name: "删除账号组" }).innerText()).trim()).toBe("");
   await page.keyboard.press("Escape");
