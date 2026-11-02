@@ -693,7 +693,8 @@
         </div>
       </div>
       <p class="key-note">
-        这里管理的是网关接入 Key。OpenAI / Anthropic 厂商凭据在下方“Bifrost 账号”中管理，
+        这里管理的是网关接入 Key。OpenAI / Anthropic 厂商凭据在
+        <a href="/ltsp/accounts" data-tab-link>Bifrost 账号</a> 中管理，
         <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
         可调整模型范围和权重。
       </p>
@@ -712,13 +713,14 @@
       </details>
       <small
         >示例只创建客户端。发起调用时，选择已录入 key 有权使用的模型
-        ID。以上管理链接均在新标签页打开。</small
+        ID。调用统计、请求记录和高级设置等外链均在新标签页打开。</small
       >
     </section>
     <section id="account-groups" class="tab-panel" role="tabpanel" aria-labelledby="tab-groups" hidden>
       <h2 id="groups-title" class="sr-only">账号组</h2>
       <p>
-        把共用同一额度的账号归为一组。刷新日期按上游配置中的时区解读；余额、暂停与恢复以组为单位。
+        把共用同一额度的账号归为一组。刷新日期按
+        <a href="/ltsp/upstreams" data-tab-link>上游配置</a> 中的时区解读；余额、暂停与恢复以组为单位。
       </p>
       <div id="accounts" class="table-scroll">
         <table class="group-table" aria-label="账号组">
@@ -735,7 +737,8 @@
           <tbody>
             <tr id="groups-empty">
               <td colspan="6" class="empty">
-                暂无账号组。点击“添加账号组”，保存后到“Bifrost 账号”关联账号。
+                暂无账号组。点击“添加账号组”，保存后到
+                <a href="/ltsp/accounts" data-tab-link>Bifrost 账号</a> 关联账号。
               </td>
             </tr>
           </tbody>
@@ -759,7 +762,8 @@
         <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
       </div>
       <p>
-        每行对应 Bifrost 中的一条 API key。选择同一上游的账号组；留空表示不归组，按原生账号池转发。
+        每行对应 Bifrost 中的一条 API key。选择同一上游的
+        <a href="/ltsp/groups" data-tab-link>账号组</a>；留空表示不归组，按原生账号池转发。
       </p>
       <div id="key-assignments" class="table-scroll">
         <table class="key-table" aria-label="Bifrost 账号">
@@ -791,7 +795,8 @@
       <h2 id="providers-title" class="sr-only">上游配置</h2>
       <p>
         时区与刷新截止时间一起确定重试起点。默认 America/Los_Angeles
-        20:00，随夏令时调整；从账号组刷新日期当天的截止时间起允许重试 48 小时，失败仍逐步退避。
+        20:00，随夏令时调整；从
+        <a href="/ltsp/groups" data-tab-link>账号组</a> 刷新日期当天的截止时间起允许重试 48 小时，失败仍逐步退避。
       </p>
       <div id="provider-settings" class="table-scroll">
         <table class="provider-table" aria-label="上游配置">
@@ -1016,13 +1021,17 @@
       setProp($("#recovery-note"), "hidden", selected.id !== "tab-groups");
       if (historyMode && location.pathname !== selected.pathname)
         history[historyMode + "State"](null, "", selected.pathname);
+      return selected;
     }
-    for (const [index, tab] of tabs.entries()) {
-      tab.addEventListener("click", (event) => {
+    for (const link of document.querySelectorAll('a[role="tab"], a[data-tab-link]')) {
+      link.addEventListener("click", (event) => {
         if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        selectTab(tab.pathname);
+        const selected = selectTab(link.pathname);
+        if (link.hasAttribute("data-tab-link")) selected.focus({ preventScroll: true });
       });
+    }
+    for (const [index, tab] of tabs.entries()) {
       tab.addEventListener("keydown", (event) => {
         let next;
         if (event.key === "ArrowRight") next = (index + 1) % tabs.length;

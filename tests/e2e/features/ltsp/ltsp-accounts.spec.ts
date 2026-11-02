@@ -53,12 +53,21 @@ test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page 
   await expect(page).toHaveURL(/\/ltsp\/accounts$/);
   await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   await page.locator("#openai-python summary").click();
+  await page.locator("#client-config a[data-tab-link]").click();
+  await expect(page).toHaveURL(/\/ltsp\/accounts$/);
+  await expect(page.getByRole("tab", { name: "Bifrost 账号", exact: true })).toBeFocused();
+  await page.goBack();
+  await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
   await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await expect(page.locator("#groups-empty a[data-tab-link]")).toHaveAttribute(
+    "href",
+    "/ltsp/accounts",
+  );
   await page.locator("#add").click();
   const name = page.getByLabel("账号组名称");
   await name.fill("Tab draft");
   const node = await name.evaluateHandle((el) => el);
-  await page.getByRole("tab", { name: "上游配置", exact: true }).click();
+  await page.locator("#account-groups > p a[data-tab-link]").click();
   await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("21:30");
   await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
@@ -181,12 +190,14 @@ test("LTSP home explains client setup and keeps the account form open", async ({
   await expect(page).toHaveURL(origin + "/ltsp/groups");
   await expect(page.getByLabel("账号组名称")).toHaveValue("Unsaved account");
   await stats.close();
-  const links = await page.locator('a[href]:not([role="tab"])').evaluateAll((nodes) =>
-    nodes.map((node) => ({
-      target: node.getAttribute("target"),
-      rel: node.getAttribute("rel"),
-    })),
-  );
+  const links = await page
+    .locator('a[href]:not([role="tab"]):not([data-tab-link])')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        target: node.getAttribute("target"),
+        rel: node.getAttribute("rel"),
+      })),
+    );
   expect(
     links.every((link) => link.target === "_blank" && link.rel?.includes("noopener")),
   ).toBeTruthy();
