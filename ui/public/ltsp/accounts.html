@@ -90,8 +90,14 @@
       white-space: nowrap;
       border: 0;
     }
-    #access-status {
-      margin-left: auto;
+    .access-key-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .access-key-label .badge {
+      font-size: 12px;
     }
     .tab-panel > .bar {
       justify-content: flex-end;
@@ -105,6 +111,17 @@
     }
     .section-footer .save-toolbar {
       margin-left: auto;
+    }
+    .effect-note {
+      margin-left: auto;
+      max-width: 28em;
+    }
+    .effect-note strong,
+    .effect-note small {
+      display: block;
+    }
+    .effect-note strong {
+      font-size: 14px;
     }
     #account-groups {
       container: account-groups / inline-size;
@@ -271,6 +288,29 @@
       grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
       gap: 20px;
       margin-top: 18px;
+    }
+    .connection-grid > div {
+      min-width: 0;
+    }
+    .model-lists h3 {
+      font-size: 14px;
+      margin: 20px 0 6px;
+    }
+    .model-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      list-style: none;
+      margin: 8px 0;
+      padding: 0;
+      font-size: 12px;
+    }
+    .model-list li {
+      border: 1px solid var(--control-border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      max-width: 100%;
+      overflow-wrap: anywhere;
     }
     .copy-line {
       display: flex;
@@ -606,23 +646,22 @@
     </div>
     <nav class="tabs" role="tablist" aria-label="网关管理">
       <a id="tab-client" role="tab" href="/ltsp/client" aria-controls="client-config" aria-selected="false" tabindex="-1">客户端接入</a>
-      <a id="tab-groups" role="tab" href="/ltsp/groups" aria-controls="account-groups" aria-selected="false" tabindex="-1">账号组</a>
-      <a id="tab-accounts" role="tab" href="/ltsp/accounts" aria-controls="native-accounts" aria-selected="true">Bifrost 账号</a>
+      <a id="tab-groups" role="tab" href="/ltsp/groups" aria-controls="account-groups" aria-selected="true">账号组</a>
+      <a id="tab-accounts" role="tab" href="/ltsp/accounts" aria-controls="native-accounts" aria-selected="false" tabindex="-1">Bifrost 账号</a>
       <a id="tab-upstreams" role="tab" href="/ltsp/upstreams" aria-controls="upstream-settings" aria-selected="false" tabindex="-1">上游配置</a>
     </nav>
     <div class="bar">
       <div id="message" role="status" aria-live="polite"></div>
     </div>
     <section id="client-config" class="tab-panel" role="tabpanel" aria-labelledby="tab-client" data-testid="ltsp-client-config" hidden>
-      <div class="bar">
-        <h2 id="client-config-title" class="sr-only">客户端接入</h2>
+      <h2 id="client-config-title" class="sr-only">客户端接入</h2>
+      <p>
+        把客户端的 API 地址指向本网关，并填写下面的接入 Key。
+      </p>
+      <div class="access-key-label">
+        <label for="downstream-key">客户端接入 Key</label>
         <span class="badge" id="access-status">正在读取鉴权状态…</span>
       </div>
-      <p>
-        把客户端的 API 地址指向本网关，并填写下面的接入 Key。只填写地址或使用 dummy-api-key
-        将无法调用。
-      </p>
-      <label for="downstream-key">客户端接入 Key</label>
       <div class="copy-line" id="access-controls">
         <input
           id="downstream-key"
@@ -673,6 +712,15 @@
               复制 Python 配置
             </button>
           </details>
+          <div class="model-lists" data-model-provider="openai">
+            <p class="model-status" role="status" aria-live="polite">正在读取模型列表…</p>
+            <h3>所有 Key 均支持 <small class="common-count"></small></h3>
+            <ul class="model-list common-models" aria-label="OpenAI 所有 Key 均支持的模型"></ul>
+            <small class="common-empty" hidden>暂无</small>
+            <h3>部分 Key 支持 <small class="partial-count"></small></h3>
+            <ul class="model-list partial-models" aria-label="OpenAI 部分 Key 支持的模型"></ul>
+            <small class="partial-empty" hidden>暂无</small>
+          </div>
         </div>
         <div>
           <strong>Anthropic 客户端 Base URL</strong>
@@ -690,6 +738,15 @@
               复制 Python 配置
             </button>
           </details>
+          <div class="model-lists" data-model-provider="anthropic">
+            <p class="model-status" role="status" aria-live="polite">正在读取模型列表…</p>
+            <h3>所有 Key 均支持 <small class="common-count"></small></h3>
+            <ul class="model-list common-models" aria-label="Anthropic 所有 Key 均支持的模型"></ul>
+            <small class="common-empty" hidden>暂无</small>
+            <h3>部分 Key 支持 <small class="partial-count"></small></h3>
+            <ul class="model-list partial-models" aria-label="Anthropic 部分 Key 支持的模型"></ul>
+            <small class="partial-empty" hidden>暂无</small>
+          </div>
         </div>
       </div>
       <p class="key-note">
@@ -716,7 +773,7 @@
         ID。调用统计、请求记录和高级设置等外链均在新标签页打开。</small
       >
     </section>
-    <section id="account-groups" class="tab-panel" role="tabpanel" aria-labelledby="tab-groups" hidden>
+    <section id="account-groups" class="tab-panel" role="tabpanel" aria-labelledby="tab-groups">
       <h2 id="groups-title" class="sr-only">账号组</h2>
       <p>
         把共用同一额度的账号归为一组。刷新日期按
@@ -756,7 +813,7 @@
         </div>
       </div>
     </section>
-    <section id="native-accounts" class="tab-panel" role="tabpanel" aria-labelledby="tab-accounts">
+    <section id="native-accounts" class="tab-panel" role="tabpanel" aria-labelledby="tab-accounts" hidden>
       <div class="bar">
         <h2 id="keys-title" class="sr-only">Bifrost 账号</h2>
         <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
@@ -786,8 +843,9 @@
       <div class="section-footer">
         <button id="add-native-account" class="secondary" disabled>添加账号</button
         ><span id="account-message" role="status" aria-live="polite"></span>
-        <div class="save-toolbar">
-          <span class="save-note">立即生效</span>
+        <div class="effect-note">
+          <strong>账号操作独立保存</strong>
+          <small class="save-note">增删改确认后立即生效；归组选择后自动保存。</small>
         </div>
       </div>
     </section>
@@ -995,6 +1053,7 @@
   </dialog>
   <script>
     let state = { accounts: [], keys: {}, provider_schedules: [] };
+    let modelsAbort;
     const $ = (s) => document.querySelector(s);
     function setText(element, value) {
       const text = String(value);
@@ -1009,7 +1068,7 @@
     }
     const tabs = [...document.querySelectorAll('[role="tab"]')];
     function selectTab(path, historyMode = "push") {
-      const selected = tabs.find((tab) => tab.pathname === path) || $("#tab-accounts");
+      const selected = tabs.find((tab) => tab.pathname === path) || $("#tab-groups");
       for (const tab of tabs) {
         const active = tab === selected;
         setAttr(tab, "aria-selected", String(active));
@@ -1240,6 +1299,7 @@
         drafts = state;
       savedPolicy = payload(value);
       state = { ...value };
+      refreshClientModels();
       if (!previous || committed === "all") return;
       if (committed !== "groups") {
         state.accounts = drafts.accounts.flatMap((draft) => {
@@ -1303,11 +1363,12 @@
       setText($("#message"), s);
       setProp($("#message"), "className", error ? "error" : "");
     }
-    async function api(path, method = "GET", body) {
+    async function api(path, method = "GET", body, signal) {
       const r = await fetch(path, {
         method,
         headers: { "Content-Type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
+        signal,
       });
       const v = await r.json();
       if (!r.ok) {
@@ -1320,6 +1381,70 @@
         throw error;
       }
       return v;
+    }
+    function updateModelLists(container, common, partial) {
+      const remaining = new Map(
+        [...container.querySelectorAll("li[data-model]")].map((item) => [item.dataset.model, item]),
+      );
+      for (const [kind, names] of [["common", common], ["partial", partial]]) {
+        const list = container.querySelector("." + kind + "-models");
+        let index = 0;
+        for (const name of names) {
+          let item = remaining.get(name);
+          remaining.delete(name);
+          if (!item) {
+            item = document.createElement("li");
+            item.dataset.model = name;
+            const code = document.createElement("code");
+            setText(code, name);
+            item.append(code);
+          }
+          if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
+          index++;
+        }
+        setText(container.querySelector("." + kind + "-count"), "（" + names.length + "）");
+        setProp(container.querySelector("." + kind + "-empty"), "hidden", names.length > 0);
+      }
+      for (const item of remaining.values()) item.remove();
+    }
+    async function refreshClientModels() {
+      modelsAbort?.abort();
+      const controller = new AbortController();
+      modelsAbort = controller;
+      await Promise.all(["openai", "anthropic"].map(async (provider) => {
+        const container = document.querySelector(`[data-model-provider="${provider}"]`);
+        const status = container.querySelector(".model-status");
+        const ids = new Set((state.keys[provider] || []).filter((key) => key.enabled !== false).map((key) => key.id));
+        if (!ids.size) {
+          updateModelLists(container, [], []);
+          setText(status, "尚无已启用 Key。");
+          return;
+        }
+        setText(status, "正在读取模型列表…");
+        try {
+          const models = new Map();
+          let offset = 0, total;
+          do {
+            const params = new URLSearchParams({ provider, keys: [...ids].join(","), limit: "500", offset: String(offset) });
+            const page = await api("/api/models?" + params, "GET", undefined, controller.signal);
+            total = page.total;
+            if (!page.models.length && offset < total) throw Error("模型目录分页未完成");
+            offset += page.models.length;
+            for (const model of page.models) {
+              const access = new Set((model.accessible_by_keys || []).filter((id) => ids.has(id)));
+              if (access.size) models.set(model.name, access.size === ids.size);
+            }
+          } while (offset < total);
+          if (controller.signal.aborted) return;
+          const names = [...models.keys()].sort((a, b) => a.localeCompare(b, "en"));
+          updateModelLists(container, names.filter((name) => models.get(name)), names.filter((name) => !models.get(name)));
+          setText(status, `按 ${ids.size} 个已启用 Key 的目录及模型授权汇总。`);
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          updateModelLists(container, [], []);
+          setText(status, "模型列表读取失败：" + error.message);
+        }
+      }));
     }
     function collect() {
       for (const row of document.querySelectorAll("#accounts tr[data-id]")) {

@@ -8,6 +8,9 @@ const schedules = [
 ];
 
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/models?**", (route) =>
+    route.fulfill({ json: { models: [], total: 0 } }),
+  );
   let value = "sk-bf-fixture-current-key-with-at-least-32-characters";
   await page.route("**/api/session/is-auth-enabled", (route) =>
     route.fulfill({
@@ -50,7 +53,7 @@ test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page 
   });
   await page.goto("/");
   await expect(page.getByRole("tab")).toHaveCount(4, { timeout: 1000 });
-  await expect(page).toHaveURL(/\/ltsp\/accounts$/);
+  await expect(page).toHaveURL(/\/ltsp\/groups$/);
   await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   await page.locator("#openai-python summary").click();
   await page.locator("#client-config a[data-tab-link]").click();
@@ -103,6 +106,93 @@ test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page 
   await page.keyboard.press("ArrowRight");
   await expect(page).toHaveURL(/\/ltsp\/groups$/);
   await expect(page.getByRole("tab", { name: "账号组", exact: true })).toBeFocused();
+});
+
+test("LTSP client model lists split enabled-key coverage and preserve model nodes", async ({
+  page,
+}) => {
+  let revision = 0;
+  const group = {
+    id: "g",
+    name: "Group",
+    provider: "openai",
+    key_ids: ["k1", "k2"],
+    refresh_date: "2026-11-01",
+    cycle: "monthly",
+  };
+  await page.route("**/api/ltsp/accounts", (route) =>
+    route.fulfill({
+      json: {
+        accounts: [group],
+        keys: {
+          openai: [
+            { id: "k1", enabled: true },
+            { id: "k2", enabled: true },
+            { id: "disabled", enabled: false },
+          ],
+          anthropic: revision === 2 ? [] : [{ id: "a", enabled: true }],
+        },
+        provider_schedules: schedules,
+      },
+    }),
+  );
+  const offsets: number[] = [];
+  await page.route("**/api/models?**", async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    if (query.get("provider") === "anthropic") {
+      expect(query.get("keys")).toBe("a");
+      await route.fulfill({
+        json: { models: [{ name: "common-a", accessible_by_keys: ["a"] }], total: 1 },
+      });
+    } else {
+      expect(query.get("keys")).toBe("k1,k2");
+      if (revision === 2)
+        return route.fulfill({ status: 503, json: { error: "catalog unavailable" } });
+      const offset = Number(query.get("offset"));
+      offsets.push(offset);
+      const models = [
+        { name: "common-b", accessible_by_keys: ["k1", "k2", "disabled"] },
+        { name: "partial", accessible_by_keys: revision ? ["k1", "k2"] : ["k1"] },
+        { name: "common-a", accessible_by_keys: revision ? ["k1"] : ["k1", "k2"] },
+        { name: "disabled-only", accessible_by_keys: ["disabled"] },
+      ];
+      await route.fulfill({
+        json: { models: models.slice(offset, offset + 2), total: models.length },
+      });
+    }
+  });
+  await page.goto("/ltsp/client");
+  const openai = page.locator('[data-model-provider="openai"]');
+  const anthropic = page.locator('[data-model-provider="anthropic"]');
+  await expect(openai.locator(".common-models li")).toHaveText(["common-a", "common-b"]);
+  await expect(openai.locator(".partial-models li")).toHaveText(["partial"]);
+  await expect(anthropic.locator(".common-models li")).toHaveText(["common-a"]);
+  await expect(anthropic.locator(".partial-empty")).toBeVisible();
+  expect(offsets).toEqual([0, 2]);
+  const node = await openai.locator('[data-model="common-a"]').evaluateHandle((el) => el);
+  await page.locator("#openai-python summary").click();
+  revision = 1;
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await page.getByLabel("账号组名称").fill("Updated group");
+  await page.locator("#save").click();
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
+  await expect(openai.locator(".common-models li")).toHaveText(["common-b", "partial"]);
+  await expect(openai.locator(".partial-models li")).toHaveText(["common-a"]);
+  expect(
+    await node.evaluate(
+      (el) => el === document.querySelector('[data-model-provider="openai"] .partial-models li'),
+    ),
+  ).toBeTruthy();
+  await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
+  revision = 2;
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await page.getByLabel("账号组名称").fill("Another update");
+  await page.locator("#save").click();
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
+  await expect(openai.locator(".model-status")).toContainText("catalog unavailable");
+  await expect(openai.locator("li")).toHaveCount(0);
+  await expect(anthropic.locator(".model-status")).toHaveText("尚无已启用 Key。");
+  await expect(anthropic.locator("li")).toHaveCount(0);
 });
 
 test("LTSP account editor reports the immediate funding probe", async ({ page }) => {
