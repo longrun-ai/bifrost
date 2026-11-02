@@ -377,7 +377,7 @@ test("LTSP home explains client setup and keeps the account form open", async ({
   );
   const origin = new URL(page.url()).origin;
   await expect(page.locator("#openai-url")).toHaveText(origin + "/openai");
-  await expect(page.locator("#access-status")).toHaveText("下游鉴权已启用");
+  await expect(page.locator("#access-status")).toHaveCount(0);
   await expect(page.locator("#openai-example")).not.toContainText("sk-bf-fixture-current");
   await expect(page.locator("#anthropic-url")).toHaveText(origin + "/anthropic");
   await page.getByRole("tab", { name: "账号组", exact: true }).click();
@@ -431,6 +431,35 @@ test("LTSP home explains client setup and keeps the account form open", async ({
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
   ).toBeTruthy();
+});
+
+test("LTSP reports invalid inference-auth config while retaining the only client-key controls", async ({
+  page,
+}) => {
+  await page.route("**/api/ltsp/accounts", (route) =>
+    route.fulfill({
+      json: {
+        accounts: [],
+        keys: {},
+        provider_schedules: schedules,
+        access_key_name: "ltsp-lan-clients",
+      },
+    }),
+  );
+  await page.route("**/api/session/is-auth-enabled", (route) =>
+    route.fulfill({
+      json: {
+        inference_auth_enforced: false,
+        is_auth_enabled: false,
+      },
+    }),
+  );
+  await page.goto("/ltsp/client");
+  await expect(page.locator("#access-message")).toContainText("必须启用下游鉴权");
+  await expect(page.locator("#access-message")).toHaveClass("error");
+  await expect(page.locator("#downstream-key")).toBeVisible();
+  await expect(page.locator("#rotate-access")).toBeVisible();
+  await expect(page.locator("#access-status")).toHaveCount(0);
 });
 
 test("LTSP home rotates and replaces the client key without discarding the account form", async ({
@@ -1114,11 +1143,31 @@ test("LTSP group layout fits split panes and controls follow light and dark them
   await expect(page.getByLabel("OpenAI 地区时区", { exact: true })).toHaveValue(
     "America/Los_Angeles",
   );
+  await expect(page.locator(".refresh-zone").first()).toHaveText("假定最晚 20:00 扣费刷新");
+  await expect(page.locator(".refresh-zone").first()).toHaveAttribute(
+    "title",
+    "按 America/Los_Angeles 时区判断",
+  );
+  await expect(page.locator(".gateway-title a")).toHaveAttribute(
+    "href",
+    "https://github.com/maximhq/bifrost",
+  );
   const stable = await page.getByLabel("账号组名称").evaluateHandle((el) => el);
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const width of [1280, 960, 820, 640, 390]) {
       await page.setViewportSize({ width, height: 900 });
+      if (width === 1280 || width === 960) {
+        const inline = await page
+          .locator("#accounts tr[data-id]")
+          .first()
+          .evaluate((row) => {
+            const date = row.querySelector('[name="refresh_date"]')!.getBoundingClientRect();
+            const cycle = row.querySelector('[name="cycle"]')!.getBoundingClientRect();
+            return Math.abs(date.top - cycle.top) < 2;
+          });
+        expect(inline).toBe(width === 1280);
+      }
       const fits = await page
         .locator("#accounts")
         .evaluate((el) => el.scrollWidth <= el.clientWidth + 1);

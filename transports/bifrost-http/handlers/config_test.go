@@ -45,6 +45,33 @@ func (a inferenceSetupAccount) GetConfigForProvider(p schemas.ModelProvider) (*s
 	return c, err
 }
 
+func TestLTSPInferenceAuthRequired(t *testing.T) {
+	SetLogger(&mockLogger{})
+	t.Setenv("LTSP_GATEWAY_STATE", "fixture-ltsp-accounts.json")
+	store := newRealOAuth2Store(t)
+	cfg := newTestOAuth2Config(store, configtables.MCPServerAuthModeHeaders, true)
+	cfg.ClientConfig.DisableContentLogging = true
+	cfg.ClientConfig.DisableDBPingsInHealth = true
+	require.NoError(t, store.UpdateClientConfig(bgCtx(), cfg.ClientConfig))
+	h := &ConfigHandler{store: cfg, configManager: setupConfigManager{store: store}}
+	req := putConfigCtx(`{"client_config":{"log_retention_days":7,"enforce_auth_on_inference":false,"disable_content_logging":false}}`)
+	h.updateConfig(req)
+	require.Equal(t, 400, req.Response.StatusCode())
+	require.Contains(t, string(req.Response.Body()), "必须启用下游鉴权")
+	stored, err := store.GetClientConfig(bgCtx())
+	require.NoError(t, err)
+	assert.True(t, stored.EnforceAuthOnInference)
+	assert.True(t, cfg.ClientConfig.EnforceAuthOnInference)
+	assert.True(t, cfg.ClientConfig.DisableContentLogging, "rejection must precede other live mutations")
+	health := NewHealthHandler(cfg)
+	var status fasthttp.RequestCtx
+	health.getHealth(&status)
+	require.Equal(t, 200, status.Response.StatusCode())
+	cfg.ClientConfig.EnforceAuthOnInference = false
+	health.getHealth(&status)
+	require.Equal(t, 503, status.Response.StatusCode(), "disabled DB pings cannot hide the LTSP config error")
+}
+
 func TestUpdateConfig_InferenceAuthBlocksUpstream(t *testing.T) {
 	SetLogger(&mockLogger{})
 	store := newRealOAuth2Store(t)

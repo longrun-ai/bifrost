@@ -479,6 +479,17 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
+	enforceAuthOnInference := currentConfig.EnforceAuthOnInference
+	if payload.ClientConfig.HasInferenceAuthSetting() {
+		enforceAuthOnInference = payload.ClientConfig.EnforceAuthOnInference
+	} else if payload.AuthConfig != nil && payload.AuthConfig.IsEnabled && existingAuthConfig == nil {
+		enforceAuthOnInference = true
+	}
+	if err := lib.RequireLTSPInferenceAuth(enforceAuthOnInference); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Validate MCP auth-mode / OAuth2 server settings before any live mutation
 	// below (drop-excess flag, MCP tool-manager reload, compat plugin reload,
 	// in-memory MCP config). A late rejection would return 400 while runtime
@@ -751,12 +762,6 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 	// which atomically swaps in a fresh immutable snapshot carrying the new value.
 	updatedConfig.DumpErrorsInConsoleLogs = payload.ClientConfig.DumpErrorsInConsoleLogs
 
-	enforceAuthOnInference := currentConfig.EnforceAuthOnInference
-	if payload.ClientConfig.HasInferenceAuthSetting() {
-		enforceAuthOnInference = payload.ClientConfig.EnforceAuthOnInference
-	} else if payload.AuthConfig != nil && payload.AuthConfig.IsEnabled && existingAuthConfig == nil {
-		enforceAuthOnInference = true
-	}
 	updatedConfig.EnforceAuthOnInference = enforceAuthOnInference
 	// Sync deprecated columns to match new field so they stay consistent in the DB
 	updatedConfig.EnforceGovernanceHeader = enforceAuthOnInference

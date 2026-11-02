@@ -41,6 +41,24 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestLTSPInferenceAuthRequired(t *testing.T) {
+	t.Setenv("LTSP_GATEWAY_STATE", "fixture-ltsp-accounts.json")
+	ctx := context.Background()
+	cs, err := configstore.NewConfigStore(ctx, &configstore.Config{
+		Enabled: true, Type: configstore.ConfigStoreTypeSQLite,
+		Config: &configstore.SQLiteConfig{Path: filepath.Join(t.TempDir(), "config.db")},
+	}, noopTestLogger{})
+	require.NoError(t, err)
+	defer cs.Close(ctx)
+	require.NoError(t, cs.UpdateClientConfig(ctx, &configstore.ClientConfig{EnforceAuthOnInference: false, LogRetentionDays: 99}))
+	live := &configstore.ClientConfig{EnforceAuthOnInference: true, LogRetentionDays: 7}
+	server := &BifrostHTTPServer{Config: &lib.Config{ConfigStore: cs, ClientConfig: live}}
+	err = server.ReloadClientConfigFromConfigStore(ctx)
+	require.ErrorContains(t, err, "必须启用下游鉴权")
+	assert.True(t, live.EnforceAuthOnInference)
+	assert.Equal(t, 7, live.LogRetentionDays)
+}
+
 func TestAgentRegistrationCallbacksRejectUninitializedGateway(t *testing.T) {
 	t.Parallel()
 

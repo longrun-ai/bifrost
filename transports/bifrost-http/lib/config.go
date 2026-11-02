@@ -1472,6 +1472,9 @@ func applyClientConfigDefaults(cc *configstore.ClientConfig) {
 // fails loudly at startup instead of diverging in-memory state from what the
 // operator wrote — and stays wrong (re-warned, unpersisted) on every restart.
 func validateClientConfig(cc *configstore.ClientConfig) error {
+	if err := RequireLTSPInferenceAuth(cc.EnforceAuthOnInference); err != nil {
+		return err
+	}
 	// The /api/config handler rejects an over-max auth_code_ttl, but config.json
 	// and any DB row written before the cap existed bypass that path. Fail fast
 	// here, the point where every config source converges, so a leaked one-time

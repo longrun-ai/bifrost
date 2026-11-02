@@ -90,15 +90,6 @@
       white-space: nowrap;
       border: 0;
     }
-    .access-key-label {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .access-key-label .badge {
-      font-size: 12px;
-    }
     .access-rotation {
       display: flex;
       align-items: center;
@@ -191,6 +182,15 @@
       justify-content: space-between;
       gap: 20px;
       flex-wrap: wrap;
+    }
+    .gateway-title {
+      display: flex;
+      align-items: baseline;
+      gap: 0 12px;
+      flex-wrap: wrap;
+    }
+    .gateway-title small {
+      font-weight: 400;
     }
     .grid {
       display: grid;
@@ -287,11 +287,6 @@
     .empty {
       padding: 40px;
       text-align: center;
-    }
-    .badge {
-      border: 1px solid #dce1eb;
-      padding: 3px 10px;
-      border-radius: 20px;
     }
     footer {
       margin: 28px 0;
@@ -473,6 +468,17 @@
     }
     .group-table input[name="name"] {
       font-size: 14px;
+    }
+    .refresh-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .group-table .refresh-controls input {
+      flex: 1 1 120px;
+    }
+    .group-table .refresh-controls select {
+      flex: 1 1 64px;
     }
     .group-table .status,
     .group-table .stats {
@@ -672,12 +678,13 @@
   <main>
     <nav>
       <a href="/workspace/dashboard" target="_blank" rel="noopener noreferrer">调用统计 ↗</a
-      ><a href="/workspace/providers" target="_blank" rel="noopener noreferrer">上游高级设置 ↗</a
+      ><a href="/workspace/providers" target="_blank" rel="noopener noreferrer">Bifrost 设置 ↗</a
       ><a href="/workspace/logs" target="_blank" rel="noopener noreferrer">请求记录 ↗</a>
     </nav>
     <div class="bar">
-      <div>
+      <div class="gateway-title">
         <h1>LTSP LLM API 网关</h1>
+        <small>基于 <a href="https://github.com/maximhq/bifrost" target="_blank" rel="noopener noreferrer">Bifrost</a> 实现转发</small>
       </div>
       <div id="message" role="status" aria-live="polite"></div>
     </div>
@@ -692,10 +699,7 @@
       <p>
         把客户端的 API 地址指向本网关，并填写下面的接入 Key。
       </p>
-      <div class="access-key-label">
-        <label for="downstream-key">客户端接入 Key</label>
-        <span class="badge" id="access-status">正在读取鉴权状态…</span>
-      </div>
+      <label for="downstream-key">客户端接入 Key</label>
       <div class="copy-line" id="access-controls">
         <input
           id="downstream-key"
@@ -817,7 +821,7 @@
       <p class="key-note">
         这里管理的是网关接入 Key。OpenAI / Anthropic 厂商凭据在
         <a href="/ltsp/accounts" data-tab-link>API Key</a> 中管理，
-        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
+        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">Bifrost 设置 ↗</a>
         可调整模型范围和权重。
       </p>
       <details>
@@ -827,15 +831,15 @@
           <a href="/workspace/governance/virtual-keys" target="_blank" rel="noopener noreferrer"
             >Virtual Keys ↗</a
           >
-          可管理更多接入密钥。推理鉴权在
-          <a href="/workspace/config" target="_blank" rel="noopener noreferrer">设置 ↗</a>
-          中单独配置。管理页仍向可信 LAN 免登录开放；能访问管理 API 的程序也能管理接入
+          可管理更多接入密钥。推理鉴权是 LTSP 网关的必需配置，可在
+          <a href="/workspace/config" target="_blank" rel="noopener noreferrer">Bifrost 设置 ↗</a>
+          查看。管理页仍向可信 LAN 免登录开放；能访问管理 API 的程序也能管理接入
           Key，此处用于防止只凭 base URL 的误调用。
         </p>
       </details>
       <small
         >示例只创建客户端。发起调用时，选择已录入 key 有权使用的模型
-        ID。调用统计、请求记录和高级设置等外链均在新标签页打开。</small
+        ID。调用统计、请求记录和 Bifrost 设置等外链均在新标签页打开。</small
       >
     </section>
     <section id="account-groups" class="tab-panel" role="tabpanel" aria-labelledby="tab-groups">
@@ -885,7 +889,7 @@
         每行是一条上游 API Key。选择同一上游的
         <a href="/ltsp/groups" data-tab-link>账号组</a>；留空表示不归组，按原生密钥池转发。
         </p>
-        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
+        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">Bifrost 设置 ↗</a>
       </div>
       <div id="key-assignments" class="table-scroll">
         <table class="key-table" aria-label="API Key">
@@ -976,13 +980,13 @@
         ><small class="provider-hint">先解除 API Key 关联，再改上游</small>
       </td>
       <td data-label="刷新日期／周期">
-        <input aria-label="刷新日期" name="refresh_date" type="date" /><select
+        <div class="refresh-controls"><input aria-label="刷新日期" name="refresh_date" type="date" /><select
           aria-label="刷新周期"
           name="cycle"
         >
           <option value="monthly">每月</option>
           <option value="annual">每年</option></select
-        ><small class="refresh-zone"></small>
+        ></div><small class="refresh-zone"></small>
       </td>
       <td class="balance" data-label="真实余额"></td>
       <td data-label="状态与重试">
@@ -1202,7 +1206,6 @@
       setAttr(show, "title", label);
       setAttr(show, "aria-pressed", String(accessVisible));
       show.querySelector(".eye-slash").toggleAttribute("hidden", !accessVisible);
-      setText($("#access-status"), accessEnforced ? "下游鉴权已启用" : "下游鉴权未启用");
       setText($("#rotate-access"), accessKey ? "生成新 Key 并轮换" : "创建接入 Key");
       setProp($("#rotate-access"), "disabled", false);
       setProp($("#save-access"), "disabled", !accessKey);
@@ -1235,8 +1238,8 @@
       accessKey =
         (keys.virtual_keys || []).find((key) => key.name === state.access_key_name) || null;
       renderAccess();
-      if (!accessEnforced) accessMessage("下游鉴权当前未启用，请在设置中启用。", true);
-      else if (!accessKey) accessMessage("尚无接入 Key，请点击“创建接入 Key”。");
+      if (!accessEnforced) throw Error("LTSP 网关配置错误：必须启用下游鉴权。");
+      if (!accessKey) accessMessage("尚无接入 Key，请点击“创建接入 Key”。");
     }
     async function changeAccess(value) {
       const controls = [$("#rotate-access"), $("#save-access")];
@@ -1738,8 +1741,9 @@
         setProp(row.querySelector(".provider-hint"), "hidden", !count);
         setText(
           row.querySelector(".refresh-zone"),
-          `${zoneLabel(zone)} · ${settings?.cutoff || ""} 截止`,
+          `假定最晚 ${settings?.cutoff || ""} 扣费刷新`,
         );
+        setAttr(row.querySelector(".refresh-zone"), "title", `按 ${zone} 时区判断`);
         setText(
           row.querySelector(".balance"),
           group.balance !== undefined && group.balance !== null && group.balance !== "unknown"
@@ -2220,7 +2224,7 @@
       .then((v) => {
         acceptSaved(v);
         render();
-        loadAccess().catch((error) => accessMessage("无法读取接入配置：" + error.message, true));
+        loadAccess().catch((error) => accessMessage("接入配置错误：" + error.message, true));
       })
       .catch((e) => message("配置读取失败，请刷新页面重试：" + e.message, true));
   </script>

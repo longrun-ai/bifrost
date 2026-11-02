@@ -1589,6 +1589,9 @@ func (s *BifrostHTTPServer) ReloadClientConfigFromConfigStore(ctx context.Contex
 	if config == nil {
 		return fmt.Errorf("client config not found")
 	}
+	if err := lib.RequireLTSPInferenceAuth(config.EnforceAuthOnInference); err != nil {
+		return err
+	}
 	s.Config.Mu.Lock()
 	*s.Config.ClientConfig = *config
 	s.Config.Mu.Unlock()

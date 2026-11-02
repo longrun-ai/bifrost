@@ -191,7 +191,7 @@ def run(binary, evidence):
                 "framework":{"pricing":{"pricing_url":(app/"fixture-pricing.json").as_uri(),
                     "model_parameters_url":(app/"fixture-pricing.json").as_uri(),"mcp_library_sync_interval":0,"live_models_sync_interval":0}},
                 "client": {"enable_logging": True, "disable_content_logging": True,
-                           "enforce_auth_on_inference": False,
+                           "enforce_auth_on_inference": True,
                            "log_retention_days": 90,
                            "allow_per_request_content_storage_override": False, "allow_direct_keys": False},
                 "config_store": {"enabled": True, "type": "sqlite", "config": {"path": str(app / "config.db")}},
@@ -206,6 +206,20 @@ def run(binary, evidence):
                       "proxy_config":{"type":"http","url":"http://127.0.0.1:9"}}},
             }
             provider_configs=initial["providers"]
+            invalid_app = evidence / "invalid-auth-config"
+            invalid_app.mkdir()
+            invalid = json.loads(json.dumps(initial))
+            invalid["client"]["enforce_auth_on_inference"] = False
+            invalid["config_store"]["config"]["path"] = str(invalid_app / "config.db")
+            invalid["logs_store"]["config"]["path"] = str(invalid_app / "logs.db")
+            (invalid_app / "config.json").write_text(json.dumps(invalid))
+            invalid_env = dict(os.environ, LTSP_GATEWAY_STATE=str(invalid_app / "accounts.json"),
+                               BIFROST_ENCRYPTION_KEY="fixture-only-encryption-passphrase", BIFROST_HOST="127.0.0.1")
+            invalid_log = evidence / "invalid-auth-startup.log"
+            with invalid_log.open("wb") as failed_start:
+                rejected = subprocess.run([binary, "-app-dir", str(invalid_app), "-port", str(port), "-log-level", "warn"],
+                                          env=invalid_env, stdout=failed_start, stderr=subprocess.STDOUT, timeout=45)
+            assert rejected.returncode != 0 and "必须启用下游鉴权" in invalid_log.read_text(errors="replace"), "LTSP started with inference auth disabled"
             # Only the operator's fixture file selects private local upstreams.
             # Exercise unauthenticated key registration without requesting the
             # native API's separately protected private-endpoint capability.
@@ -240,7 +254,11 @@ def run(binary, evidence):
                 cfg["vk_rotation_cooldown"]="0s"
                 status,raw=request(url+"/api/config",{"client_config":cfg},method="PUT")
                 assert status==200,("configure client auth",status,raw[:400])
+                invalid_cfg = dict(cfg, enforce_auth_on_inference=False)
+                status, raw = request(url+"/api/config", {"client_config": invalid_cfg}, method="PUT")
+                assert status == 400 and "必须启用下游鉴权" in raw.decode(), "LTSP allowed disabling inference auth"
                 assert json.loads(request(url+"/api/session/is-auth-enabled")[1])["inference_auth_enforced"]
+                assert request(url+"/health")[0] == 200
                 def auth_headers(extra=None):return {"Authorization":"Bearer "+access,**(extra or {})}
                 status, home = request(url + "/")
                 assert status == 200 and "客户端接入" in home.decode(), "root did not serve the LTSP account home"

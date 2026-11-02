@@ -15678,6 +15678,19 @@ func TestSourceOfTruthConfigJSON_PluginInDBNotInFile(t *testing.T) {
 // ===================================================================================
 
 // TestGenerateClientConfigHash tests hash generation for client config
+func TestLTSPInferenceAuthRequired(t *testing.T) {
+	initTestLogger()
+	t.Setenv("LTSP_GATEWAY_STATE", "")
+	cc := DefaultClientConfig
+	cc.EnforceAuthOnInference = false
+	require.NoError(t, validateClientConfig(&cc), "ordinary Bifrost may keep auth optional")
+	t.Setenv("LTSP_GATEWAY_STATE", filepath.Join(t.TempDir(), "accounts.json"))
+	err := validateClientConfig(&cc)
+	require.ErrorContains(t, err, "必须启用下游鉴权")
+	cc.EnforceAuthOnInference = true
+	require.NoError(t, validateClientConfig(&cc))
+}
+
 func TestGenerateClientConfigHash(t *testing.T) {
 	initTestLogger()
 
