@@ -99,6 +99,15 @@
     .access-key-label .badge {
       font-size: 12px;
     }
+    .access-rotation {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 10px 0 18px;
+    }
+    .access-rotation button {
+      flex-shrink: 0;
+    }
     .tab-panel > .bar {
       justify-content: flex-end;
     }
@@ -671,14 +680,14 @@
           placeholder="正在读取…"
         /><button type="button" class="secondary" id="show-access">显示</button
         ><button type="button" class="secondary" data-copy="downstream-key" disabled>
-          复制 Key</button
-        ><button type="button" id="rotate-access" disabled>生成并轮换</button>
+          复制 Key</button>
       </div>
       <p id="access-message" role="status" aria-live="polite"></p>
-      <small
-        >轮换后旧 Key 立即失效，请同步更新客户端。示例默认隐藏
-        Key，复制配置时会自动填入当前有效值。</small
-      >
+      <div class="access-rotation">
+        <button type="button" id="rotate-access" disabled>生成并轮换</button>
+        <small>轮换后旧 Key 立即失效，请同步更新客户端。示例默认隐藏
+        Key，复制配置时会自动填入当前有效值。</small>
+      </div>
       <details>
         <summary>手动设置新的接入 Key</summary>
         <label for="custom-access">新 Key（sk-bf- 开头，32–256 个字母、数字、连字符或下划线）</label
