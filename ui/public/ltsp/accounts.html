@@ -108,8 +108,18 @@
     .access-rotation button {
       flex-shrink: 0;
     }
-    .tab-panel > .bar {
-      justify-content: flex-end;
+    .account-intro {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .account-intro p {
+      flex: 1;
+      margin: 0;
+    }
+    .account-intro > a {
+      flex-shrink: 0;
     }
     .section-footer {
       display: flex;
@@ -843,14 +853,14 @@
       </div>
     </section>
     <section id="native-accounts" class="tab-panel" role="tabpanel" aria-labelledby="tab-accounts" hidden>
-      <div class="bar">
-        <h2 id="keys-title" class="sr-only">Bifrost 账号</h2>
-        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
-      </div>
-      <p>
+      <h2 id="keys-title" class="sr-only">Bifrost 账号</h2>
+      <div class="account-intro">
+        <p>
         每行对应 Bifrost 中的一条 API key。选择同一上游的
         <a href="/ltsp/groups" data-tab-link>账号组</a>；留空表示不归组，按原生账号池转发。
-      </p>
+        </p>
+        <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
+      </div>
       <div id="key-assignments" class="table-scroll">
         <table class="key-table" aria-label="Bifrost 账号">
           <thead>
