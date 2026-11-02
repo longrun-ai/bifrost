@@ -331,6 +331,16 @@
       max-width: 100%;
       overflow-wrap: anywhere;
     }
+    .model-overflow {
+      max-height: 14rem;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      margin-top: 8px;
+      border: 1px solid var(--control-border);
+      border-radius: 6px;
+      padding: 0 8px;
+    }
     .copy-line {
       display: flex;
       align-items: center;
@@ -748,6 +758,13 @@
             <h3>所有 Key 均支持 <small class="common-count"></small></h3>
             <ul class="model-list common-models" aria-label="OpenAI 所有 Key 均支持的模型"></ul>
             <small class="common-empty" hidden>暂无</small>
+            <small class="common-order-note" hidden></small>
+            <details class="more-models" hidden>
+              <summary>其他模型 <span class="other-common-count"></span></summary>
+              <div class="model-overflow" tabindex="0" role="region" aria-label="OpenAI 其他模型">
+                <ul class="model-list other-common-models" aria-label="OpenAI 其他所有 Key 均支持的模型"></ul>
+              </div>
+            </details>
             <h3>部分 Key 支持 <small class="partial-count"></small></h3>
             <ul class="model-list partial-models" aria-label="OpenAI 部分 Key 支持的模型"></ul>
             <small class="partial-empty" hidden>暂无</small>
@@ -779,6 +796,13 @@
             <h3>所有 Key 均支持 <small class="common-count"></small></h3>
             <ul class="model-list common-models" aria-label="Anthropic 所有 Key 均支持的模型"></ul>
             <small class="common-empty" hidden>暂无</small>
+            <small class="common-order-note" hidden></small>
+            <details class="more-models" hidden>
+              <summary>其他模型 <span class="other-common-count"></span></summary>
+              <div class="model-overflow" tabindex="0" role="region" aria-label="Anthropic 其他模型">
+                <ul class="model-list other-common-models" aria-label="Anthropic 其他所有 Key 均支持的模型"></ul>
+              </div>
+            </details>
             <h3>部分 Key 支持 <small class="partial-count"></small></h3>
             <ul class="model-list partial-models" aria-label="Anthropic 部分 Key 支持的模型"></ul>
             <small class="partial-empty" hidden>暂无</small>
@@ -888,7 +912,7 @@
     <section id="upstream-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-upstreams" hidden>
       <h2 id="providers-title" class="sr-only">上游配置</h2>
       <p>
-        时区与刷新截止时间一起确定重试起点。默认 America/Los_Angeles
+        时区与扣款（额度刷新）截止时间一起确定重试起点。默认 America/Los_Angeles
         20:00，随夏令时调整；从
         <a href="/ltsp/groups" data-tab-link>账号组</a> 刷新日期当天的截止时间起允许重试 48 小时，失败仍逐步退避。
       </p>
@@ -898,7 +922,7 @@
             <tr>
               <th>上游</th>
               <th>时区</th>
-              <th>刷新截止时间</th>
+              <th>扣款（额度刷新）截止时间</th>
               <th>探测模型</th>
             </tr>
           </thead>
@@ -1443,7 +1467,7 @@
       const remaining = new Map(
         [...container.querySelectorAll("li[data-model]")].map((item) => [item.dataset.model, item]),
       );
-      for (const [kind, names] of [["common", common], ["partial", partial]]) {
+      for (const [kind, names] of [["common", common.slice(0, 8)], ["other-common", common.slice(8)], ["partial", partial]]) {
         const list = container.querySelector("." + kind + "-models");
         let index = 0;
         for (const name of names) {
@@ -1459,10 +1483,28 @@
           if (list.children[index] !== item) list.insertBefore(item, list.children[index] || null);
           index++;
         }
-        setText(container.querySelector("." + kind + "-count"), "（" + names.length + "）");
-        setProp(container.querySelector("." + kind + "-empty"), "hidden", names.length > 0);
+        setText(container.querySelector("." + kind + "-count"), "（" + (kind === "common" ? common.length : names.length) + "）");
       }
+      setProp(container.querySelector(".common-empty"), "hidden", common.length > 0);
+      setProp(container.querySelector(".partial-empty"), "hidden", partial.length > 0);
+      setProp(container.querySelector(".common-order-note"), "hidden", !common.length);
+      setProp(container.querySelector(".more-models"), "hidden", common.length <= 8);
       for (const item of remaining.values()) item.remove();
+    }
+    function compareModels(a, b, usage) {
+      const used = (usage.get(b) || 0) - (usage.get(a) || 0);
+      if (used) return used;
+      const category = (name) => {
+        if (/audio|image|embedding|transcrib|realtime|whisper|moderation|tts|live/i.test(name)) return 2;
+        if (/^(gpt-\d|o\d|claude-)/i.test(name))
+          return /-\d{4}-\d{2}-\d{2}|-\d{8}/.test(name) ? 1 : 0;
+        return 2;
+      };
+      const priority = category(a) - category(b);
+      if (priority) return priority;
+      return category(a) < 2
+        ? b.localeCompare(a, "en", { numeric: true })
+        : a.localeCompare(b, "en", { numeric: true });
     }
     async function refreshClientModels() {
       modelsAbort?.abort();
@@ -1479,6 +1521,13 @@
         }
         setText(status, "正在读取模型列表…");
         try {
+          const end = new Date();
+          const rankingQuery = new URLSearchParams({
+            providers: provider, selected_key_ids: [...ids].join(","), status: "success", all: "true",
+            start_time: new Date(end.getTime() - 7 * 86400000).toISOString(), end_time: end.toISOString(),
+          });
+          const rankingSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(3000)]);
+          const ranking = api("/api/logs/rankings?" + rankingQuery, "GET", undefined, rankingSignal).catch(() => null);
           const models = new Map();
           let offset = 0, total;
           do {
@@ -1492,9 +1541,17 @@
               if (access.size) models.set(model.name, access.size === ids.size);
             }
           } while (offset < total);
+          const recent = await ranking, usage = new Map();
+          for (const entry of recent?.rankings || [])
+            for (const name of new Set([entry.model, entry.canonical_model_name].filter(Boolean)))
+              usage.set(name, (usage.get(name) || 0) + entry.total_requests);
           if (controller.signal.aborted) return;
-          const names = [...models.keys()].sort((a, b) => a.localeCompare(b, "en"));
+          const names = [...models.keys()].sort((a, b) => compareModels(a, b, usage));
           updateModelLists(container, names.filter((name) => models.get(name)), names.filter((name) => !models.get(name)));
+          const used = names.some((name) => models.get(name) && usage.has(name));
+          setText(container.querySelector(".common-order-note"), used
+            ? "近 7 天常用优先，其次为通用、代码模型。"
+            : "通用、代码模型优先，日期版本与专用模型在后。");
           setText(status, `按 ${ids.size} 个已启用 Key 的目录及模型授权汇总。`);
         } catch (error) {
           if (controller.signal.aborted) return;
@@ -1864,7 +1921,7 @@
           };
           for (const [field, label] of [
             ["timezone", "地区时区"],
-            ["cutoff", "刷新截止时间"],
+            ["cutoff", "扣款（额度刷新）截止时间"],
             ["probe_model", "探测模型"],
           ]) {
             const input = row.querySelector(`[name=${field}]`);

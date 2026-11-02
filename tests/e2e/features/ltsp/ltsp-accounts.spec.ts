@@ -8,6 +8,7 @@ const schedules = [
 ];
 
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/logs/rankings?**", (route) => route.fulfill({ json: { rankings: [] } }));
   await page.route("**/api/models?**", (route) =>
     route.fulfill({ json: { models: [], total: 0 } }),
   );
@@ -71,12 +72,14 @@ test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page 
   await name.fill("Tab draft");
   const node = await name.evaluateHandle((el) => el);
   await page.locator("#account-groups > p a[data-tab-link]").click();
-  await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("21:30");
+  await page.getByLabel("OpenAI 扣款（额度刷新）截止时间", { exact: true }).fill("21:30");
   await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
   await page.goBack();
   await expect(page).toHaveURL(/\/ltsp\/upstreams$/);
-  await expect(page.getByLabel("OpenAI 刷新截止时间", { exact: true })).toHaveValue("21:30");
+  await expect(page.getByLabel("OpenAI 扣款（额度刷新）截止时间", { exact: true })).toHaveValue(
+    "21:30",
+  );
   await page.goBack();
   await expect(page).toHaveURL(/\/ltsp\/groups$/);
   await expect(name).toHaveValue("Tab draft");
@@ -193,6 +196,111 @@ test("LTSP client model lists split enabled-key coverage and preserve model node
   await expect(openai.locator("li")).toHaveCount(0);
   await expect(anthropic.locator(".model-status")).toHaveText("尚无已启用 Key。");
   await expect(anthropic.locator("li")).toHaveCount(0);
+});
+
+test("LTSP client keeps common models upfront and other models in a stable scroll region", async ({
+  page,
+}) => {
+  let failRanking = false;
+  const models = [
+    "babbage-002",
+    "gpt-4.1",
+    "gpt-5.6-sol",
+    "gpt-6-sol",
+    "gpt-6.1-sol",
+    "gpt-6.1-terra",
+    "gpt-5.5",
+    "gpt-5-mini",
+    "gpt-5",
+    "gpt-6.1-sol-2026-10-01",
+    "whisper-1",
+    ...Array.from({ length: 40 }, (_, i) => `text-embedding-fixture-${i}`),
+  ];
+  const group = {
+    id: "g",
+    name: "Group",
+    provider: "openai",
+    key_ids: ["k"],
+    refresh_date: "2026-11-01",
+    cycle: "monthly",
+  };
+  await page.route("**/api/ltsp/accounts", (route) =>
+    route.fulfill({
+      json: {
+        accounts: [group],
+        keys: { openai: [{ id: "k", enabled: true }] },
+        provider_schedules: schedules,
+      },
+    }),
+  );
+  await page.route("**/api/models?**", (route) =>
+    route.fulfill({
+      json: {
+        models: models.map((name) => ({ name, accessible_by_keys: ["k"] })),
+        total: models.length,
+      },
+    }),
+  );
+  await page.route("**/api/logs/rankings?**", (route) => {
+    const q = new URL(route.request().url()).searchParams;
+    expect(q.get("selected_key_ids")).toBe("k");
+    expect(q.get("status")).toBe("success");
+    expect(Date.parse(q.get("end_time")!) - Date.parse(q.get("start_time")!)).toBe(7 * 86400000);
+    return route.fulfill(
+      failRanking
+        ? { status: 503, json: { error: "stats unavailable" } }
+        : {
+            json: {
+              rankings: [
+                { model: "local-alias", canonical_model_name: "gpt-5.6-sol", total_requests: 20 },
+                { model: "whisper-1", total_requests: 3 },
+              ],
+            },
+          },
+    );
+  });
+  await page.setViewportSize({ width: 900, height: 700 });
+  await page.goto("/ltsp/client");
+  const container = page.locator('[data-model-provider="openai"]');
+  await expect(container.locator(".common-models li")).toHaveCount(8);
+  await expect(container.locator(".common-models li").nth(0)).toHaveText("gpt-5.6-sol");
+  await expect(container.locator(".common-models li").nth(1)).toHaveText("whisper-1");
+  await expect(container.locator(".common-count")).toHaveText(`（${models.length}）`);
+  const details = container.locator(".more-models");
+  await expect(details).not.toHaveAttribute("open");
+  await expect(container.locator(".other-common-models")).toBeHidden();
+  await details.locator("summary").click();
+  const scroll = container.locator(".model-overflow");
+  await expect(scroll).toBeVisible();
+  const stable = await scroll.evaluateHandle((el) => {
+    el.scrollTop = 120;
+    return { el, row: el.querySelector('[data-model="babbage-002"]'), top: el.scrollTop };
+  });
+  expect(await scroll.evaluate((el) => el.scrollHeight > el.clientHeight)).toBeTruthy();
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await page.getByLabel("账号组名称").fill("Saved group");
+  await page.locator("#save").click();
+  await expect(page.locator("#dirty-dot")).toBeHidden();
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
+  await expect(details).toHaveAttribute("open", "");
+  expect(
+    await stable.evaluate(
+      ({ el, row, top }) =>
+        el.isConnected &&
+        el.querySelector('[data-model="babbage-002"]') === row &&
+        el.scrollTop === top,
+    ),
+  ).toBeTruthy();
+  failRanking = true;
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await page.getByLabel("账号组名称").fill("Fallback order");
+  await page.locator("#save").click();
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
+  await expect(container.locator(".common-order-note")).toHaveText(
+    "通用、代码模型优先，日期版本与专用模型在后。",
+  );
+  await expect(container.locator(".common-models li").first()).toHaveText("gpt-6.1-terra");
+  await expect(container.locator(".model-list li")).toHaveCount(models.length);
 });
 
 test("LTSP account editor reports the immediate funding probe", async ({ page }) => {
@@ -444,7 +552,7 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
   await page.getByRole("tab", { name: "上游配置", exact: true }).click();
   await page.getByLabel("OpenAI 时区类型", { exact: true }).selectOption("region");
   await page.getByLabel("OpenAI 地区时区", { exact: true }).fill("America/Los_Angeles");
-  await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("20:30");
+  await page.getByLabel("OpenAI 扣款（额度刷新）截止时间", { exact: true }).fill("20:30");
   await page.getByLabel("OpenAI 探测模型", { exact: true }).fill("preferred-model");
   await page.locator("#save-provider").click();
   await expect(page.locator("#message")).toHaveText("上游配置已保存。");
@@ -847,7 +955,7 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
   await page.goto("/ltsp/groups");
   await page.getByLabel("账号组名称").fill("Group draft");
   await page.getByRole("tab", { name: "上游配置", exact: true }).click();
-  await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("21:00");
+  await page.getByLabel("OpenAI 扣款（额度刷新）截止时间", { exact: true }).fill("21:00");
   await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
   await page.locator('[data-key-id="k"] .edit-account').click();
   await page.getByLabel("账号名称", { exact: true }).fill("Renamed account");
@@ -863,7 +971,9 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
     weight: 7,
   });
   await expect(page.getByLabel("账号组名称")).toHaveValue("Group draft");
-  await expect(page.getByLabel("OpenAI 刷新截止时间", { exact: true })).toHaveValue("21:00");
+  await expect(page.getByLabel("OpenAI 扣款（额度刷新）截止时间", { exact: true })).toHaveValue(
+    "21:00",
+  );
   await expect(page.locator("#dirty-dot")).not.toHaveAttribute("hidden");
   await expect(page.locator("#provider-dirty-dot")).not.toHaveAttribute("hidden");
   await page.locator('[data-key-id="k"] .edit-account').click();
