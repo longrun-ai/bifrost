@@ -53,13 +53,14 @@ test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page 
     });
   });
   await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("LTSP LLM API 网关");
   await expect(page.getByRole("tab")).toHaveCount(4, { timeout: 1000 });
   await expect(page).toHaveURL(/\/ltsp\/groups$/);
   await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   await page.locator("#openai-python summary").click();
   await page.locator("#client-config a[data-tab-link]").click();
   await expect(page).toHaveURL(/\/ltsp\/accounts$/);
-  await expect(page.getByRole("tab", { name: "Bifrost 账号", exact: true })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "API Key", exact: true })).toBeFocused();
   await page.goBack();
   await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
   await page.getByRole("tab", { name: "账号组", exact: true }).click();
@@ -94,7 +95,7 @@ test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page 
   for (const [path, label] of [
     ["client", "客户端接入"],
     ["groups", "账号组"],
-    ["accounts", "Bifrost 账号"],
+    ["accounts", "API Key"],
     ["upstreams", "上游配置"],
   ]) {
     await page.goto("/ltsp/" + path);
@@ -103,6 +104,7 @@ test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page 
       "true",
     );
     await expect(page.getByRole("tabpanel")).toHaveCount(1);
+    await expect(page).toHaveTitle(label + " · LTSP LLM API 网关");
   }
   const first = page.getByRole("tab", { name: "客户端接入", exact: true });
   await first.focus();
@@ -563,9 +565,9 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
     cutoff: "20:30",
     probe_model: "preferred-model",
   });
-  await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
+  await page.getByRole("tab", { name: "API Key", exact: true }).click();
   await page.getByLabel("所属账号组：OpenAI account").selectOption("");
-  await expect(page.locator("#account-message")).toHaveText("账号归属已保存。");
+  await expect(page.locator("#account-message")).toHaveText("API Key 归组已保存。");
   await expect(page.getByLabel("所属账号组：OpenAI account")).toHaveValue("");
   expect(accounts[0].key_ids).toEqual([]);
   await expect(groups.locator('[data-id="o-group"] select[name=provider]')).toBeEnabled();
@@ -671,7 +673,7 @@ test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll
   await page.setViewportSize({ width: 900, height: 700 });
   await page.goto("/ltsp/groups");
   await page.getByLabel("账号组名称").fill("Edited group");
-  await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
+  await page.getByRole("tab", { name: "API Key", exact: true }).click();
   const assignment = page.getByLabel("所属账号组：OpenAI account", { exact: true });
   await assignment.focus();
   const stable = await page.evaluateHandle(() => {
@@ -859,6 +861,7 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
 
 test("LTSP native account CRUD saves immediately while preserving policy drafts", async ({
   page,
+  context,
 }) => {
   type Key = {
     id: string;
@@ -919,6 +922,11 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
     }
     await route.fulfill({ json: view() });
   });
+  await page.route("**/api/ltsp/keys/*/*/secret", async (route) => {
+    const parts = new URL(route.request().url()).pathname.split("/");
+    const key = keys[parts[4]]?.find((key) => key.id === parts[5]);
+    await route.fulfill({ json: { value: key?.value }, headers: { "Cache-Control": "no-store" } });
+  });
   await page.route("**/api/ltsp/assignments", async (route) => {
     const body = route.request().postDataJSON();
     for (const group of groups) group.key_ids = group.key_ids.filter((id) => id !== body.key_id);
@@ -956,12 +964,33 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
   await page.getByLabel("账号组名称").fill("Group draft");
   await page.getByRole("tab", { name: "上游配置", exact: true }).click();
   await page.getByLabel("OpenAI 扣款（额度刷新）截止时间", { exact: true }).fill("21:00");
-  await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
+  await page.getByRole("tab", { name: "API Key", exact: true }).click();
   await page.locator('[data-key-id="k"] .edit-account').click();
-  await page.getByLabel("账号名称", { exact: true }).fill("Renamed account");
+  const secretInput = page.locator("#account-dialog").getByLabel("API Key", { exact: true });
+  await expect(secretInput).toHaveValue("fixture-old-secret");
+  await expect(secretInput).toHaveAttribute("type", "password");
+  await expect(secretInput).toHaveAttribute("autocomplete", "off");
+  const secretNode = await page.locator("#account-secret").evaluateHandle((el) => el);
+  await page.getByRole("button", { name: "显示 API Key", exact: true }).click();
+  await expect(page.locator("#account-secret")).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "隐藏 API Key", exact: true }).click();
+  const secure = await page.evaluate(() => window.isSecureContext);
+  if (secure) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "复制 API Key", exact: true }).click();
+  await expect(page.getByRole("button", { name: "复制 API Key", exact: true })).toHaveAttribute(
+    "title",
+    "已复制",
+  );
+  if (secure)
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("fixture-old-secret");
+  expect(
+    await secretNode.evaluate((el) => el === document.querySelector("#account-secret")),
+  ).toBeTruthy();
+  await page.getByLabel("API Key 名称", { exact: true }).fill("Renamed account");
   await page.getByLabel("启用", { exact: true }).uncheck();
-  await page.getByRole("button", { name: "保存账号", exact: true }).click();
+  await page.getByRole("button", { name: "保存 API Key", exact: true }).click();
   await expect(page.locator("#account-dialog")).not.toBeVisible();
+  await expect(page.locator("#account-secret")).toHaveValue("");
   expect(writes[0].body).not.toHaveProperty("value");
   expect(keys.openai[0]).toMatchObject({
     name: "Renamed account",
@@ -977,15 +1006,15 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
   await expect(page.locator("#dirty-dot")).not.toHaveAttribute("hidden");
   await expect(page.locator("#provider-dirty-dot")).not.toHaveAttribute("hidden");
   await page.locator('[data-key-id="k"] .edit-account').click();
-  await page.getByLabel("API key", { exact: true }).fill("fixture-new-secret");
-  await page.getByRole("button", { name: "保存账号", exact: true }).click();
+  await secretInput.fill("fixture-new-secret");
+  await page.getByRole("button", { name: "保存 API Key", exact: true }).click();
   await expect(page.locator("#account-dialog")).not.toBeVisible();
   expect(keys.openai[0].value).toBe("fixture-new-secret");
-  await page.getByRole("button", { name: "添加账号", exact: true }).click();
+  await page.getByRole("button", { name: "添加 API Key", exact: true }).click();
   await page.getByLabel("上游", { exact: true }).selectOption("anthropic");
-  await page.getByLabel("账号名称", { exact: true }).fill("New Claude account");
-  await page.getByLabel("API key", { exact: true }).fill("fixture-claude-secret");
-  await page.getByRole("button", { name: "保存账号", exact: true }).click();
+  await page.getByLabel("API Key 名称", { exact: true }).fill("New Claude account");
+  await secretInput.fill("fixture-claude-secret");
+  await page.getByRole("button", { name: "保存 API Key", exact: true }).click();
   await expect(page.locator("#account-dialog")).not.toBeVisible();
   await expect(page.getByLabel("所属账号组：New Claude account")).toHaveValue("");
   await page.locator('[data-key-id="k"] .delete-account').click();
@@ -1009,6 +1038,53 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
   await page.locator("#save-provider").click();
   await expect(page.locator("#provider-dirty-dot")).toBeHidden();
   expect(prefs[0].cutoff).toBe("21:00");
+});
+
+test("LTSP API Key editor blocks writes until the existing secret loads and rejects empty edits", async ({
+  page,
+}) => {
+  let fail = true,
+    writes = 0;
+  await page.route("**/api/ltsp/accounts", (route) =>
+    route.fulfill({
+      json: {
+        accounts: [],
+        provider_schedules: schedules,
+        keys: { openai: [{ id: "k", name: "Key", enabled: true }] },
+      },
+    }),
+  );
+  await page.route("**/api/ltsp/keys/openai/k/secret", (route) =>
+    route.fulfill(
+      fail
+        ? { status: 503, json: { error: "read unavailable" } }
+        : { json: { value: "fixture-current-secret" } },
+    ),
+  );
+  await page.route("**/api/providers/**", (route) => {
+    writes++;
+    return route.fulfill({ json: {} });
+  });
+  await page.goto("/ltsp/accounts");
+  await page.getByRole("button", { name: "编辑 API Key", exact: true }).click();
+  await expect(page.locator("#account-error")).toContainText("read unavailable");
+  await expect(page.getByRole("button", { name: "保存 API Key", exact: true })).toBeDisabled();
+  await expect(page.locator("#account-secret")).toBeDisabled();
+  await page.locator("#account-cancel").click();
+  await expect(page.locator("#account-secret")).toHaveValue("");
+  fail = false;
+  await page.getByRole("button", { name: "编辑 API Key", exact: true }).click();
+  await expect(page.locator("#account-secret")).toHaveValue("fixture-current-secret");
+  await page.locator("#account-secret").fill("");
+  await page.getByRole("button", { name: "保存 API Key", exact: true }).click();
+  expect(
+    await page
+      .locator("#account-secret")
+      .evaluate((el: HTMLInputElement) => el.validity.valueMissing),
+  ).toBeTruthy();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  expect(writes).toBe(0);
+  await page.locator("#account-cancel").click();
 });
 
 test("LTSP group layout fits split panes and controls follow light and dark themes", async ({
@@ -1092,8 +1168,8 @@ test("LTSP group layout fits split panes and controls follow light and dark them
         100,
       );
     }
-    await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
-    await page.getByRole("button", { name: "添加账号", exact: true }).click();
+    await page.getByRole("tab", { name: "API Key", exact: true }).click();
+    await page.getByRole("button", { name: "添加 API Key", exact: true }).click();
     const dialogColors = await page.locator("#account-provider").evaluate((el) => ({
       select: getComputedStyle(el).backgroundColor,
       option: getComputedStyle(el.querySelector("option")!).backgroundColor,

@@ -99,7 +99,7 @@ func TestAccountAPIPreventsCrossProviderAssignment(t *testing.T) {
 	}
 }
 
-func TestShellKeepsAccountHomeAndLinksSeparate(t *testing.T) {
+func TestShellRedirectsRootAndLeavesNativePagesUnmodified(t *testing.T) {
 	m := manager(t)
 	m.AccountsPage = []byte("<html>account home</html>")
 	var req fasthttp.RequestCtx
@@ -109,9 +109,51 @@ func TestShellKeepsAccountHomeAndLinksSeparate(t *testing.T) {
 		t.Fatal("root did not redirect to account groups")
 	}
 	req.Request.SetRequestURI("/workspace/dashboard")
-	got := string(m.Shell(&req, []byte("<body>native dashboard</body>")))
-	if !strings.Contains(got, "native dashboard") || !strings.Contains(got, `href="/" target="_blank" rel="noopener noreferrer"`) {
-		t.Fatal("workspace page or separate home link was lost")
+	for _, path := range []string{"/workspace/dashboard", "/workspace/providers", "/workspace/logs"} {
+		req.Request.SetRequestURI(path)
+		body := []byte("<body><dialog>native key editor</dialog></body>")
+		if got := m.Shell(&req, body); string(got) != string(body) {
+			t.Fatalf("native page was modified with an overlay: %s", path)
+		}
+	}
+}
+
+func TestSelectedKeySecretUsesExactProviderAndRejectsCrossSiteReads(t *testing.T) {
+	m := manager(t)
+	m.Keys = func(p string) []schemas.Key {
+		return []schemas.Key{{ID: "same-id", Value: *schemas.NewSecretVar("fixture-" + p)}}
+	}
+	r := router.New()
+	m.Register(r)
+	for _, test := range []struct {
+		path, origin, site, content, value string
+		status                             int
+	}{
+		{"openai/same-id", "", "same-origin", "application/json", "fixture-openai", 200},
+		{"anthropic/same-id", "", "same-origin", "application/json", "fixture-anthropic", 200},
+		{"openai/missing", "", "same-origin", "application/json", "", 404},
+		{"other/same-id", "", "same-origin", "application/json", "", 400},
+		{"openai/same-id", "https://unrelated.example", "cross-site", "application/json", "", 403},
+		{"openai/same-id", "", "cross-site", "application/json", "", 403},
+		{"openai/same-id", "", "same-origin", "", "", 415},
+	} {
+		var req fasthttp.RequestCtx
+		req.Request.SetRequestURI("/api/ltsp/keys/" + test.path + "/secret")
+		req.Request.Header.SetMethod("GET")
+		req.Request.Header.Set("Origin", test.origin)
+		req.Request.Header.Set("Sec-Fetch-Site", test.site)
+		req.Request.Header.SetContentType(test.content)
+		r.Handler(&req)
+		if req.Response.StatusCode() != test.status || string(req.Response.Header.Peek("Cache-Control")) != "no-store" {
+			t.Fatalf("secret response/cache policy differs for %s: %d", test.path, req.Response.StatusCode())
+		}
+		var value map[string]string
+		if err := json.Unmarshal(req.Response.Body(), &value); err != nil {
+			t.Fatal(err)
+		}
+		if value["value"] != test.value {
+			t.Fatalf("wrong or unexpected secret returned for %s", test.path)
+		}
 	}
 }
 

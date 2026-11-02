@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>API 账号 · LTSP 网关</title>
+  <title>账号组 · LTSP LLM API 网关</title>
   <style>
     :root {
       color-scheme: light;
@@ -359,6 +359,11 @@
       min-width: 0;
       margin-top: 0;
     }
+    #account-secret {
+      flex: 1;
+      min-width: 0;
+      margin-top: 0;
+    }
     .copy-line button {
       flex-shrink: 0;
       padding: 5px 10px;
@@ -667,19 +672,19 @@
   <main>
     <nav>
       <a href="/workspace/dashboard" target="_blank" rel="noopener noreferrer">调用统计 ↗</a
-      ><a href="/workspace/providers" target="_blank" rel="noopener noreferrer">API key 管理 ↗</a
+      ><a href="/workspace/providers" target="_blank" rel="noopener noreferrer">上游高级设置 ↗</a
       ><a href="/workspace/logs" target="_blank" rel="noopener noreferrer">请求记录 ↗</a>
     </nav>
     <div class="bar">
       <div>
-        <h1>LAN API 网关</h1>
+        <h1>LTSP LLM API 网关</h1>
       </div>
       <div id="message" role="status" aria-live="polite"></div>
     </div>
     <nav class="tabs" role="tablist" aria-label="网关管理">
       <a id="tab-client" role="tab" href="/ltsp/client" aria-controls="client-config" aria-selected="false" tabindex="-1">客户端接入</a>
       <a id="tab-groups" role="tab" href="/ltsp/groups" aria-controls="account-groups" aria-selected="true">账号组</a>
-      <a id="tab-accounts" role="tab" href="/ltsp/accounts" aria-controls="native-accounts" aria-selected="false" tabindex="-1">Bifrost 账号</a>
+      <a id="tab-accounts" role="tab" href="/ltsp/accounts" aria-controls="native-accounts" aria-selected="false" tabindex="-1">API Key</a>
       <a id="tab-upstreams" role="tab" href="/ltsp/upstreams" aria-controls="upstream-settings" aria-selected="false" tabindex="-1">上游配置</a>
     </nav>
     <section id="client-config" class="tab-panel" role="tabpanel" aria-labelledby="tab-client" data-testid="ltsp-client-config" hidden>
@@ -811,7 +816,7 @@
       </div>
       <p class="key-note">
         这里管理的是网关接入 Key。OpenAI / Anthropic 厂商凭据在
-        <a href="/ltsp/accounts" data-tab-link>Bifrost 账号</a> 中管理，
+        <a href="/ltsp/accounts" data-tab-link>API Key</a> 中管理，
         <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
         可调整模型范围和权重。
       </p>
@@ -836,7 +841,7 @@
     <section id="account-groups" class="tab-panel" role="tabpanel" aria-labelledby="tab-groups">
       <h2 id="groups-title" class="sr-only">账号组</h2>
       <p>
-        把共用同一额度的账号归为一组。刷新日期按
+        把共用同一额度的 API Key 归为一组。刷新日期按
         <a href="/ltsp/upstreams" data-tab-link>上游配置</a> 中的时区解读；余额、暂停与恢复以组为单位。
       </p>
       <div id="accounts" class="table-scroll">
@@ -855,7 +860,7 @@
             <tr id="groups-empty">
               <td colspan="6" class="empty">
                 暂无账号组。点击“添加账号组”，保存后到
-                <a href="/ltsp/accounts" data-tab-link>Bifrost 账号</a> 关联账号。
+                <a href="/ltsp/accounts" data-tab-link>API Key</a> 关联密钥。
               </td>
             </tr>
           </tbody>
@@ -874,19 +879,19 @@
       </div>
     </section>
     <section id="native-accounts" class="tab-panel" role="tabpanel" aria-labelledby="tab-accounts" hidden>
-      <h2 id="keys-title" class="sr-only">Bifrost 账号</h2>
+      <h2 id="keys-title" class="sr-only">API Key</h2>
       <div class="account-intro">
         <p>
-        每行对应 Bifrost 中的一条 API key。选择同一上游的
-        <a href="/ltsp/groups" data-tab-link>账号组</a>；留空表示不归组，按原生账号池转发。
+        每行是一条上游 API Key。选择同一上游的
+        <a href="/ltsp/groups" data-tab-link>账号组</a>；留空表示不归组，按原生密钥池转发。
         </p>
         <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
       </div>
       <div id="key-assignments" class="table-scroll">
-        <table class="key-table" aria-label="Bifrost 账号">
+        <table class="key-table" aria-label="API Key">
           <thead>
             <tr>
-              <th>账号／API key 名称</th>
+              <th>API Key 名称</th>
               <th>上游</th>
               <th>状态</th>
               <th>所属账号组（留空可不关联）</th>
@@ -895,16 +900,16 @@
           </thead>
           <tbody>
             <tr id="keys-empty">
-              <td colspan="5" class="empty">尚无 Bifrost 账号，请先录入 API key。</td>
+              <td colspan="5" class="empty">尚无 API Key，请先添加。</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="section-footer">
-        <button id="add-native-account" class="secondary" disabled>添加账号</button
+        <button id="add-native-account" class="secondary" disabled>添加 API Key</button
         ><span id="account-message" role="status" aria-live="polite"></span>
         <div class="effect-note">
-          <strong>账号操作独立保存</strong>
+          <strong>API Key 操作独立保存</strong>
           <small class="save-note">增删改确认后立即生效；归组选择后自动保存。</small>
         </div>
       </div>
@@ -947,13 +952,13 @@
       <small>GMT 固定偏移不会随夏令时变化；需要夏令时或其它分钟偏移时，选择“地区时区”。</small>
       <small
         >探测模型留空时，从 catalog
-        随机选择该组账号可用的文本模型，成功后填入并保存。已配置模型明确不支持时也会重新选择；余额、认证、限流及网络错误直接反馈。</small
+        随机选择该组 API Key 可用的文本模型，成功后填入并保存。已配置模型明确不支持时也会重新选择；余额、认证、限流及网络错误直接反馈。</small
       >
     </section>
     <footer id="recovery-note" hidden>
       “已到账，立即重试”会当场调用上游，产生少量用量并记入统计。仅模型明确不支持时才换下一个候选模型，整次操作最多
       45 秒。
-      成功才解除暂停；修改日期不会清除失败回避。已手动禁用的账号不会被启用。代理固定使用本机网段的
+      成功才解除暂停；修改日期不会清除失败回避。已手动禁用的 API Key 不会被启用。代理固定使用本机网段的
       VNP gateway client。
     </footer>
   </main>
@@ -968,7 +973,7 @@
         <select aria-label="账号组上游" name="provider">
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option></select
-        ><small class="provider-hint">先清空账号关联，再改上游</small>
+        ><small class="provider-hint">先解除 API Key 关联，再改上游</small>
       </td>
       <td data-label="刷新日期／周期">
         <input aria-label="刷新日期" name="refresh_date" type="date" /><select
@@ -1032,9 +1037,9 @@
       </td>
       <td>
         <div class="actions">
-          <button class="edit-account secondary icon-button" aria-label="编辑账号" title="编辑账号">
+          <button class="edit-account secondary icon-button" aria-label="编辑 API Key" title="编辑 API Key">
             ✎</button
-          ><button class="delete-account danger icon-button" aria-label="删除账号" title="删除账号">
+          ><button class="delete-account danger icon-button" aria-label="删除 API Key" title="删除 API Key">
             <svg
               width="18"
               height="18"
@@ -1081,33 +1086,45 @@
     style="position: fixed; left: -9999px; top: 0"
   ></textarea>
   <dialog id="account-dialog" aria-labelledby="account-dialog-title">
-    <form id="account-form">
-      <h2 id="account-dialog-title">添加账号</h2>
+    <form id="account-form" autocomplete="off">
+      <h2 id="account-dialog-title">添加 API Key</h2>
       <label for="account-provider">上游</label
       ><select id="account-provider">
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic</option></select
-      ><label for="account-name">账号名称</label
+      ><label for="account-name">API Key 名称</label
       ><input id="account-name" maxlength="200" required /><label for="account-secret"
-        >API key</label
-      ><input id="account-secret" type="password" autocomplete="new-password" required /><label
+        >API Key</label
+      ><div class="copy-line">
+        <input id="account-secret" type="password" autocomplete="off" spellcheck="false" required />
+        <button type="button" id="show-account-secret" class="secondary icon-button" aria-label="显示 API Key" title="显示 API Key" aria-pressed="false" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18" hidden/>
+          </svg>
+        </button>
+        <button type="button" class="secondary icon-button" data-copy="account-secret" aria-label="复制 API Key" title="复制 API Key" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <g class="copy-symbol"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></g><path class="copied-symbol" d="m5 12 4 4L19 6" hidden/>
+          </svg>
+        </button>
+      </div><label
         class="check"
         ><input id="account-enabled" type="checkbox" checked />启用</label
       >
       <p id="account-error" role="alert"></p>
       <div class="actions">
-        <button id="account-submit" type="submit">保存账号</button
+        <button id="account-submit" type="submit">保存 API Key</button
         ><button id="account-cancel" class="secondary" type="button">取消</button>
       </div>
     </form>
   </dialog>
   <dialog id="delete-account-dialog" aria-labelledby="delete-account-title">
-    <h2 id="delete-account-title">删除账号</h2>
+    <h2 id="delete-account-title">删除 API Key</h2>
     <p id="delete-account-name"></p>
-    <p>删除该 API key 及其归组关联？</p>
+    <p>删除该 API Key 及其归组关联？</p>
     <p id="delete-account-error" role="alert"></p>
     <div class="actions">
-      <button id="confirm-delete-account" class="danger">删除账号</button
+      <button id="confirm-delete-account" class="danger">删除 API Key</button
       ><button id="cancel-delete-account" class="secondary">取消</button>
     </div>
   </dialog>
@@ -1135,7 +1152,7 @@
         setProp(tab, "tabIndex", active ? 0 : -1);
         setProp($("#" + tab.getAttribute("aria-controls")), "hidden", !active);
       }
-      const title = selected.textContent.trim() + " · LTSP 网关";
+      const title = selected.textContent.trim() + " · LTSP LLM API 网关";
       if (document.title !== title) document.title = title;
       setProp($("#recovery-note"), "hidden", selected.id !== "tab-groups");
       if (historyMode && location.pathname !== selected.pathname)
@@ -1278,7 +1295,7 @@
             return;
           }
         }
-        const text = copyValues[source.id] ?? source.textContent;
+        const text = copyValues[source.id] ?? (source instanceof HTMLInputElement ? source.value : source.textContent);
         let copied = false;
         if (window.isSecureContext && navigator.clipboard) {
           try {
@@ -1320,6 +1337,10 @@
           if (Object.hasOwn(copyValues, source.id)) {
             accessVisible = true;
             renderAccess();
+          }
+          if (source.id === "account-secret") {
+            setProp(source, "type", "text");
+            renderAccountSecret();
           }
           if (source instanceof HTMLInputElement) {
             source.focus();
@@ -1674,7 +1695,7 @@
             collect();
             state.accounts = state.accounts.filter((a) => a.id !== id);
             render();
-            message("删除及其账号解除关联将在保存后生效，上游 API key 保留。");
+            message("账号组删除与 API Key 解除关联将在保存后生效，上游 API Key 保留。");
           };
           row.querySelector(".probe").onclick = async () => {
             collect();
@@ -1713,7 +1734,7 @@
           setProp(input, "value", group[field] || "");
           setProp(input, "disabled", policyBusy || (field === "provider" && count > 0));
         }
-        setText(row.querySelector(".key-count"), `${count} 个关联账号`);
+        setText(row.querySelector(".key-count"), `${count} 个关联 API Key`);
         setProp(row.querySelector(".provider-hint"), "hidden", !count);
         setText(
           row.querySelector(".refresh-zone"),
@@ -1737,8 +1758,8 @@
               : active
                 ? "可参与转发"
                 : count
-                  ? "无启用账号"
-                  : "未关联账号",
+                  ? "无启用 API Key"
+                  : "未关联 API Key",
         );
         setProp(
           row.querySelector(".status"),
@@ -1822,7 +1843,7 @@
         for (const group of (savedPolicy?.accounts || []).filter((a) => a.provider === provider))
           for (const id of group.key_ids || []) {
             if (!keys.some((k) => k.id === id))
-              keys.push({ id, name: "已从 Bifrost 删除的账号", enabled: false, missing: true });
+              keys.push({ id, name: "已删除的 API Key", enabled: false, missing: true });
           }
         for (const key of keys) {
           count++;
@@ -1847,7 +1868,7 @@
                   group_id: groupID,
                 });
                 acceptSaved(value, "none");
-                accountMessage("账号归属已保存。");
+                accountMessage("API Key 归组已保存。");
               } catch (error) {
                 accountMessage(error.message, true);
               } finally {
@@ -2023,26 +2044,75 @@
     }
     $("#save").onclick = () => saveScope("groups");
     $("#save-provider").onclick = () => saveScope("providers");
-    function openAccount(provider = "openai", id = "") {
+    let accountOriginalSecret = "", accountReadAbort;
+    function renderAccountSecret() {
+      const input = $("#account-secret"), button = $("#show-account-secret");
+      const visible = input.type === "text", label = visible ? "隐藏 API Key" : "显示 API Key";
+      setAttr(button, "aria-label", label);
+      setAttr(button, "title", label);
+      setAttr(button, "aria-pressed", String(visible));
+      button.querySelector(".eye-slash").toggleAttribute("hidden", !visible);
+      setProp(button, "disabled", input.disabled || !input.value);
+      setProp($('[data-copy="account-secret"]'), "disabled", input.disabled || !input.value);
+    }
+    $("#show-account-secret").onclick = () => {
+      const input = $("#account-secret");
+      setProp(input, "type", input.type === "password" ? "text" : "password");
+      renderAccountSecret();
+    };
+    $("#account-secret").oninput = renderAccountSecret;
+    async function openAccount(provider = "openai", id = "") {
       collect();
+      accountReadAbort?.abort();
+      const controller = new AbortController();
+      accountReadAbort = controller;
+      accountOriginalSecret = "";
       const key = (state.keys[provider] || []).find((k) => k.id === id);
       const dialog = $("#account-dialog");
       dialog.dataset.provider = provider;
       dialog.dataset.keyId = id;
-      setText($("#account-dialog-title"), id ? "编辑账号" : "添加账号");
+      setText($("#account-dialog-title"), id ? "编辑 API Key" : "添加 API Key");
       setProp($("#account-provider"), "value", provider);
       setProp($("#account-provider"), "disabled", !!id);
       setProp($("#account-name"), "value", key?.name || "");
       setProp($("#account-secret"), "value", "");
-      setProp($("#account-secret"), "required", !id);
-      setAttr($("#account-secret"), "placeholder", id ? "留空保留原 Key" : "填写 API key");
+      setProp($("#account-secret"), "type", "password");
+      setProp($("#account-secret"), "disabled", !!id);
+      setProp($("#account-submit"), "disabled", !!id);
+      setAttr($("#account-secret"), "placeholder", id ? "正在读取…" : "填写 API Key");
       setProp($("#account-enabled"), "checked", key?.enabled ?? true);
       setText($("#account-error"), "");
+      const copy = $('[data-copy="account-secret"]');
+      clearTimeout(copy.copyTimer);
+      copy.querySelector(".copy-symbol").toggleAttribute("hidden", false);
+      copy.querySelector(".copied-symbol").toggleAttribute("hidden", true);
+      setAttr(copy, "title", "复制 API Key");
+      renderAccountSecret();
       dialog.showModal();
+      if (!id) return;
+      try {
+        const secret = await api("/api/ltsp/keys/" + encodeURIComponent(provider) + "/" + encodeURIComponent(id) + "/secret", "GET", undefined, controller.signal);
+        if (controller.signal.aborted || !dialog.open) return;
+        setProp($("#account-secret"), "value", secret.value);
+        accountOriginalSecret = $("#account-secret").value;
+        setProp($("#account-secret"), "disabled", false);
+        setAttr($("#account-secret"), "placeholder", "填写 API Key");
+        setProp($("#account-submit"), "disabled", false);
+        renderAccountSecret();
+      } catch (error) {
+        if (!controller.signal.aborted) setText($("#account-error"), "无法读取 API Key：" + error.message + "。请关闭后重试。");
+      }
     }
     $("#add-native-account").onclick = () => openAccount();
     $("#account-cancel").onclick = () => $("#account-dialog").close();
-    $("#account-dialog").onclose = () => setProp($("#account-secret"), "value", "");
+    $("#account-dialog").onclose = () => {
+      if ($("#account-dialog").open) return;
+      accountReadAbort?.abort();
+      accountOriginalSecret = "";
+      setProp($("#account-secret"), "value", "");
+      setProp($("#account-secret"), "type", "password");
+      renderAccountSecret();
+    };
     $("#account-dialog").oncancel = (event) => {
       if (accountBusy) event.preventDefault();
     };
@@ -2058,8 +2128,12 @@
         name: $("#account-name").value.trim(),
         enabled: $("#account-enabled").checked,
       };
-      const secret = $("#account-secret").value.trim();
-      if (secret) body.value = secret;
+      const entered = $("#account-secret").value, secret = entered.trim();
+      if (!secret) {
+        setText($("#account-error"), "请填写 API Key。");
+        return;
+      }
+      if (!id || entered !== accountOriginalSecret) body.value = secret;
       accountBusy = true;
       setProp($("#account-submit"), "disabled", true);
       setProp($("#account-cancel"), "disabled", true);
@@ -2084,14 +2158,14 @@
         }
         acceptSaved(await api("/api/ltsp/accounts"), "none");
         dialog.close();
-        accountMessage(id ? "账号已更新。" : "账号已添加。");
+        accountMessage(id ? "API Key 已更新。" : "API Key 已添加。");
       } catch (error) {
         setText($("#account-error"), error.message);
       } finally {
         accountBusy = false;
         setProp($("#account-submit"), "disabled", false);
         setProp($("#account-cancel"), "disabled", false);
-        setText($("#account-submit"), "保存账号");
+        setText($("#account-submit"), "保存 API Key");
         render();
       }
     };
@@ -2125,11 +2199,11 @@
         await api("/api/ltsp/assignments", "PUT", { provider, key_id: id, group_id: "" });
         acceptSaved(await api("/api/ltsp/accounts"), "none");
         dialog.close();
-        accountMessage("账号已删除。");
+        accountMessage("API Key 已删除。");
       } catch (error) {
         if (deleted) {
           dialog.close();
-          accountMessage("账号已删除；解除关联未完成：" + error.message, true);
+          accountMessage("API Key 已删除；解除关联未完成：" + error.message, true);
           try {
             acceptSaved(await api("/api/ltsp/accounts"), "none");
           } catch {}
@@ -2138,7 +2212,7 @@
         accountBusy = false;
         setProp($("#confirm-delete-account"), "disabled", false);
         setProp($("#cancel-delete-account"), "disabled", false);
-        setText($("#confirm-delete-account"), "删除账号");
+        setText($("#confirm-delete-account"), "删除 API Key");
         render();
       }
     };

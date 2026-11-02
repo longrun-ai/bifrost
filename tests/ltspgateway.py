@@ -245,10 +245,21 @@ def run(binary, evidence):
                 status, home = request(url + "/")
                 assert status == 200 and "客户端接入" in home.decode(), "root did not serve the LTSP account home"
                 assert request(url + "/ltsp/accounts")[1] == home, "home alias differs from root"
+                status, native_ui = request(url + "/workspace/providers")
+                assert status == 200 and "账号与客户端接入" not in native_ui.decode(), "native editor still has an LTSP overlay"
                 for provider,cfg in provider_configs.items():
                     for key in cfg["keys"]:
                         status,raw=request(url+"/api/providers/"+provider+"/keys",key)
                         assert status in (200,201),("API key registration",status,raw[:400])
+                        secret_url = url + "/api/ltsp/keys/" + provider + "/" + key["id"] + "/secret"
+                        req = urllib.request.Request(secret_url, headers={"Content-Type": "application/json"})
+                        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=10) as revealed:
+                            assert revealed.headers.get("Cache-Control") == "no-store", "selected-key response can be cached"
+                            assert json.load(revealed)["value"] == key["value"], "selected-key read returned a mask or another key"
+                        assert request(secret_url, headers={"Origin":"https://unrelated.example"})[0] == 403
+                        assert request(secret_url, headers={"Sec-Fetch-Site":"cross-site"})[0] == 403
+                        status, native_key = request(url + "/api/providers/" + provider + "/keys/" + key["id"])
+                        assert status == 200 and json.loads(native_key)["value"] != key["value"], "native redaction was weakened"
                 assert request(url+"/api/ltsp/accounts",headers={"Origin":"https://unrelated.example"})[0]==403
                 today = datetime.date.today().isoformat()
                 policy = json.loads(request(url+"/api/ltsp/accounts")[1])

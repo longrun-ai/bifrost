@@ -65,8 +65,7 @@ func (m *Manager) Shell(ctx *fasthttp.RequestCtx, body []byte) []byte {
 		ctx.Redirect("/ltsp/groups", fasthttp.StatusFound)
 		return nil
 	}
-	link := `<a href="/" target="_blank" rel="noopener noreferrer" style="position:fixed;right:24px;bottom:20px;z-index:9999;background:#315ac8;color:white;border-radius:9px;padding:9px 14px;font:14px system-ui;text-decoration:none">账号与客户端接入</a>`
-	return []byte(strings.Replace(string(body), "</body>", link+"</body>", 1))
+	return body
 }
 
 func (m *Manager) Register(r *router.Router, middleware ...schemas.BifrostHTTPMiddleware) {
@@ -83,6 +82,7 @@ func (m *Manager) Register(r *router.Router, middleware ...schemas.BifrostHTTPMi
 		}))
 	}
 	r.GET("/api/ltsp/accounts", chain(m.get))
+	r.GET("/api/ltsp/keys/{provider}/{key_id}/secret", chain(m.keySecret))
 	r.PUT("/api/ltsp/accounts", chain(m.put))
 	r.PUT("/api/ltsp/assignments", chain(m.assign))
 	r.POST("/api/ltsp/accounts/{id}/probe", chain(m.probe))
@@ -116,6 +116,35 @@ func sameOrigin(ctx *fasthttp.RequestCtx) bool {
 		return false
 	}
 	return true
+}
+
+// keySecret reveals only the selected provider key to the trusted LAN editor.
+// The ordinary key list and the native Bifrost APIs retain their redaction.
+func (m *Manager) keySecret(ctx *fasthttp.RequestCtx) {
+	ctx.Response.Header.Set("Cache-Control", "no-store")
+	if !sameOrigin(ctx) {
+		return
+	}
+	provider, _ := ctx.UserValue("provider").(string)
+	id, _ := ctx.UserValue("key_id").(string)
+	if (provider != "openai" && provider != "anthropic") || id == "" {
+		reply(ctx, 400, map[string]string{"error": "API Key 参数无效"})
+		return
+	}
+	if m.Keys != nil {
+		for _, key := range m.Keys(provider) {
+			if key.ID == id {
+				value := key.Value.GetValue()
+				if value == "" {
+					reply(ctx, 400, map[string]string{"error": "该 API Key 没有可读取的密钥值"})
+					return
+				}
+				reply(ctx, 200, map[string]string{"value": value})
+				return
+			}
+		}
+	}
+	reply(ctx, 404, map[string]string{"error": "API Key 不存在"})
 }
 
 func (m *Manager) get(ctx *fasthttp.RequestCtx) {
@@ -183,7 +212,7 @@ func (m *Manager) put(ctx *fasthttp.RequestCtx) {
 		for _, a := range *s.Accounts {
 			for _, id := range a.KeyIDs {
 				if owner, known := owners[id]; known && owner != a.Provider {
-					reply(ctx, 400, map[string]string{"error": "Bifrost 账号与账号组须属于同一上游"})
+					reply(ctx, 400, map[string]string{"error": "API Key 与账号组须属于同一上游"})
 					return
 				}
 			}

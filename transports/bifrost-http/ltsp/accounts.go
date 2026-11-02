@@ -163,11 +163,11 @@ func validate(accounts []Account) error {
 	ids, keys := map[string]bool{}, map[string]bool{}
 	for _, a := range accounts {
 		if a.ID == "" || len(a.ID) > 100 || ids[a.ID] || strings.TrimSpace(a.Name) == "" || len(a.Name) > 200 {
-			return errors.New("账号 ID 或名称无效或重复")
+			return errors.New("账号组 ID 或名称无效或重复")
 		}
 		ids[a.ID] = true
 		if a.Provider != "openai" && a.Provider != "anthropic" {
-			return errors.New("仅支持 OpenAI / Anthropic 账号")
+			return errors.New("仅支持 OpenAI / Anthropic 账号组")
 		}
 		if a.Cycle != "monthly" && a.Cycle != "annual" {
 			return errors.New("刷新周期须为 monthly 或 annual")
@@ -178,7 +178,7 @@ func validate(accounts []Account) error {
 		for _, id := range a.KeyIDs {
 			k := a.Provider + ":" + id
 			if id == "" || keys[k] {
-				return errors.New("每个 Bifrost 账号只能关联一个同上游账号组")
+				return errors.New("每个 API Key 只能关联一个同上游账号组")
 			}
 			keys[k] = true
 		}
@@ -260,7 +260,7 @@ func (m *Manager) Edit(accountEdit *[]Account, scheduleEdit *[]ProviderSchedule)
 			for _, current := range m.accounts {
 				if a.ID == current.ID {
 					if a.Provider != current.Provider && len(current.KeyIDs) > 0 {
-						return errors.New("先解除账号关联，再更改账号组上游")
+						return errors.New("先解除 API Key 关联，再更改账号组上游")
 					}
 					accounts[i].KeyIDs = append([]string{}, current.KeyIDs...)
 					break
@@ -286,7 +286,7 @@ func (m *Manager) Assign(provider, keyID, groupID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if (provider != "openai" && provider != "anthropic") || keyID == "" {
-		return errors.New("账号参数无效")
+		return errors.New("API Key 参数无效")
 	}
 	found := groupID == ""
 	accounts := append([]Account(nil), m.accounts...)
@@ -299,14 +299,14 @@ func (m *Manager) Assign(provider, keyID, groupID string) error {
 		}
 		if a.ID == groupID {
 			if a.Provider != provider {
-				return errors.New("账号与账号组须属于同一上游")
+				return errors.New("API Key 与账号组须属于同一上游")
 			}
 			found = true
 			accounts[i].KeyIDs = append(accounts[i].KeyIDs, keyID)
 		}
 	}
 	if !found {
-		return errors.New("请先保存账号组，再关联账号")
+		return errors.New("请先保存账号组，再关联 API Key")
 	}
 	if groupID != "" {
 		foundKey := false
@@ -319,7 +319,7 @@ func (m *Manager) Assign(provider, keyID, groupID string) error {
 			}
 		}
 		if !foundKey {
-			return errors.New("Bifrost 账号不存在")
+			return errors.New("API Key 不存在")
 		}
 	}
 	return m.replaceLocked(accounts, m.schedules)
@@ -358,7 +358,7 @@ func (m *Manager) replaceLocked(accounts []Account, next []ProviderSchedule) err
 				}
 			}
 			if !found {
-				return errors.New("探测正在进行，不能删除账号")
+				return errors.New("探测正在进行，不能删除账号组")
 			}
 		}
 	}
@@ -561,7 +561,7 @@ func (m *Manager) finishLocked(a *Account, e *schemas.BifrostError) error {
 	}
 	if err := m.saveLocked(); err != nil {
 		// Keep the conservative in-memory verdict and surface the persistence failure.
-		a.LastResult = "账号状态保存失败：" + err.Error()
+		a.LastResult = "账号组状态保存失败：" + err.Error()
 		return err
 	}
 	return nil
@@ -580,11 +580,11 @@ func (m *Manager) ProbeNow(ctx context.Context, id string) (Account, error) {
 	}
 	if !found {
 		m.mu.Unlock()
-		return a, errors.New("账号不存在")
+		return a, errors.New("账号组不存在")
 	}
 	if m.busy[id] {
 		m.mu.Unlock()
-		return a, errors.New("该账号已有恢复探测正在进行")
+		return a, errors.New("该账号组已有恢复探测正在进行")
 	}
 	preferred := ""
 	for _, s := range m.schedules {
@@ -633,7 +633,7 @@ func (m *Manager) ProbeNow(ctx context.Context, id string) (Account, error) {
 	}
 	if len(candidates) == 0 {
 		m.mu.Unlock()
-		return a, errors.New("账号组没有已启用且支持候选模型的账号；请检查 catalog、模型配置与账号关联")
+		return a, errors.New("账号组没有已启用且支持候选模型的 API Key；请检查 catalog、模型配置与 API Key 关联")
 	}
 	if m.Probe == nil {
 		m.mu.Unlock()
@@ -674,7 +674,7 @@ func (m *Manager) ProbeNow(ctx context.Context, id string) (Account, error) {
 			return m.accounts[i], err
 		}
 	}
-	return a, errors.New("账号已删除")
+	return a, errors.New("账号组已删除")
 }
 
 func UnsupportedModel(e *schemas.BifrostError) bool {
