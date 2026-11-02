@@ -33,11 +33,6 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 12px;
-      background: #fff;
-      border: 1px solid #dce1eb;
-      border-radius: 12px;
-      box-shadow: 0 6px 24px #0002;
     }
     #save,
     #save-provider {
@@ -60,12 +55,46 @@
       font-size: 13px;
       color: var(--muted);
     }
-    .policy-section {
-      border: 1px solid #dce1eb;
-      border-radius: 14px;
-      padding: 20px;
+    .tab-panel {
       margin: 24px 0;
-      background: white;
+    }
+    .tabs {
+      gap: 4px;
+      margin-top: 28px;
+      border-bottom: 1px solid var(--control-border);
+    }
+    .tabs a {
+      padding: 9px 13px;
+      border-bottom: 3px solid transparent;
+      text-decoration: none;
+      color: var(--muted);
+    }
+    .tabs a[aria-selected="true"] {
+      color: #315ac8;
+      border-bottom-color: currentColor;
+      font-weight: 650;
+    }
+    .tabs a:focus-visible {
+      outline: 2px solid #315ac8;
+      outline-offset: -2px;
+      border-radius: 4px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+    #access-status {
+      margin-left: auto;
+    }
+    .tab-panel > .bar {
+      justify-content: flex-end;
     }
     .section-footer {
       display: flex;
@@ -126,13 +155,6 @@
       justify-content: space-between;
       gap: 20px;
       flex-wrap: wrap;
-    }
-    .card {
-      background: white;
-      border: 1px solid #dce1eb;
-      border-radius: 14px;
-      padding: 24px;
-      margin: 20px 0;
     }
     .grid {
       display: grid;
@@ -502,15 +524,13 @@
       min-width: 260px;
     }
     @media (prefers-color-scheme: dark) {
-      .policy-section,
       dialog {
         background: #1a2432;
         color: #e0e6f2;
         border-color: #394458;
       }
-      .save-toolbar {
-        background: #1a2432;
-        border-color: #394458;
+      .tabs a[aria-selected="true"] {
+        color: #9bb6ff;
       }
       .recovery-details {
         background: #1a2432;
@@ -538,10 +558,6 @@
         --muted: #a0aec3;
         background: #121923;
         color: #e0e6f2;
-      }
-      .card {
-        background: #1a2432;
-        border-color: #394458;
       }
       .keys {
         background: #121923;
@@ -588,9 +604,18 @@
         <p>账号归组、调用统计与额度恢复</p>
       </div>
     </div>
-    <section class="card" aria-labelledby="client-config-title" data-testid="ltsp-client-config">
+    <nav class="tabs" role="tablist" aria-label="网关管理">
+      <a id="tab-client" role="tab" href="/ltsp/client" aria-controls="client-config" aria-selected="false" tabindex="-1">客户端接入</a>
+      <a id="tab-groups" role="tab" href="/ltsp/groups" aria-controls="account-groups" aria-selected="false" tabindex="-1">账号组</a>
+      <a id="tab-accounts" role="tab" href="/ltsp/accounts" aria-controls="native-accounts" aria-selected="true">Bifrost 账号</a>
+      <a id="tab-upstreams" role="tab" href="/ltsp/upstreams" aria-controls="upstream-settings" aria-selected="false" tabindex="-1">上游配置</a>
+    </nav>
+    <div class="bar">
+      <div id="message" role="status" aria-live="polite"></div>
+    </div>
+    <section id="client-config" class="tab-panel" role="tabpanel" aria-labelledby="tab-client" data-testid="ltsp-client-config" hidden>
       <div class="bar">
-        <h2 id="client-config-title">客户端接入</h2>
+        <h2 id="client-config-title" class="sr-only">客户端接入</h2>
         <span class="badge" id="access-status">正在读取鉴权状态…</span>
       </div>
       <p>
@@ -690,11 +715,8 @@
         ID。以上管理链接均在新标签页打开。</small
       >
     </section>
-    <div class="bar">
-      <div id="message" role="status" aria-live="polite"></div>
-    </div>
-    <section id="account-groups" class="policy-section" aria-labelledby="groups-title">
-      <h2 id="groups-title">账号组</h2>
+    <section id="account-groups" class="tab-panel" role="tabpanel" aria-labelledby="tab-groups" hidden>
+      <h2 id="groups-title" class="sr-only">账号组</h2>
       <p>
         把共用同一额度的账号归为一组。刷新日期按上游配置中的时区解读；余额、暂停与恢复以组为单位。
       </p>
@@ -713,7 +735,7 @@
           <tbody>
             <tr id="groups-empty">
               <td colspan="6" class="empty">
-                暂无账号组。点击“添加账号组”，再到下方账号表关联账号。
+                暂无账号组。点击“添加账号组”，保存后到“Bifrost 账号”关联账号。
               </td>
             </tr>
           </tbody>
@@ -724,17 +746,16 @@
           添加账号组
         </button>
         <div class="save-toolbar">
-          <strong>账号组</strong
-          ><span id="save-state" role="status" aria-live="polite">正在读取配置…</span
+          <span id="save-state" role="status" aria-live="polite">正在读取配置…</span
           ><button id="save" data-testid="ltsp-account-save" disabled>
             保存配置<span id="dirty-dot" hidden aria-hidden="true"></span>
           </button>
         </div>
       </div>
     </section>
-    <section id="native-accounts" class="policy-section" aria-labelledby="keys-title">
+    <section id="native-accounts" class="tab-panel" role="tabpanel" aria-labelledby="tab-accounts">
       <div class="bar">
-        <h2 id="keys-title">Bifrost 账号</h2>
+        <h2 id="keys-title" class="sr-only">Bifrost 账号</h2>
         <a href="/workspace/providers" target="_blank" rel="noopener noreferrer">高级设置 ↗</a>
       </div>
       <p>
@@ -762,13 +783,12 @@
         <button id="add-native-account" class="secondary" disabled>添加账号</button
         ><span id="account-message" role="status" aria-live="polite"></span>
         <div class="save-toolbar">
-          <strong>Bifrost 账号</strong
-          ><span class="save-note">立即生效</span>
+          <span class="save-note">立即生效</span>
         </div>
       </div>
     </section>
-    <section id="upstream-settings" class="policy-section" aria-labelledby="providers-title">
-      <h2 id="providers-title">上游配置</h2>
+    <section id="upstream-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-upstreams" hidden>
+      <h2 id="providers-title" class="sr-only">上游配置</h2>
       <p>
         时区与刷新截止时间一起确定重试起点。默认 America/Los_Angeles
         20:00，随夏令时调整；从账号组刷新日期当天的截止时间起允许重试 48 小时，失败仍逐步退避。
@@ -795,8 +815,7 @@
       </datalist>
       <div class="section-footer">
         <div class="save-toolbar">
-          <strong>上游配置</strong
-          ><span id="provider-save-state" role="status" aria-live="polite">正在读取配置…</span
+          <span id="provider-save-state" role="status" aria-live="polite">正在读取配置…</span
           ><button id="save-provider" disabled>
             保存上游配置<span id="provider-dirty-dot" hidden aria-hidden="true"></span>
           </button>
@@ -808,7 +827,7 @@
         随机选择该组账号可用的文本模型，成功后填入并保存。已配置模型明确不支持时也会重新选择；余额、认证、限流及网络错误直接反馈。</small
       >
     </section>
-    <footer>
+    <footer id="recovery-note" hidden>
       “已到账，立即重试”会当场调用上游，产生少量用量并记入统计。仅模型明确不支持时才换下一个候选模型，整次操作最多
       45 秒。
       成功才解除暂停；修改日期不会清除失败回避。已手动禁用的账号不会被启用。代理固定使用本机网段的
@@ -983,6 +1002,41 @@
     function setAttr(element, attribute, value) {
       if (element.getAttribute(attribute) !== value) element.setAttribute(attribute, value);
     }
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+    function selectTab(path, historyMode = "push") {
+      const selected = tabs.find((tab) => tab.pathname === path) || $("#tab-accounts");
+      for (const tab of tabs) {
+        const active = tab === selected;
+        setAttr(tab, "aria-selected", String(active));
+        setProp(tab, "tabIndex", active ? 0 : -1);
+        setProp($("#" + tab.getAttribute("aria-controls")), "hidden", !active);
+      }
+      const title = selected.textContent.trim() + " · LTSP 网关";
+      if (document.title !== title) document.title = title;
+      setProp($("#recovery-note"), "hidden", selected.id !== "tab-groups");
+      if (historyMode && location.pathname !== selected.pathname)
+        history[historyMode + "State"](null, "", selected.pathname);
+    }
+    for (const [index, tab] of tabs.entries()) {
+      tab.addEventListener("click", (event) => {
+        if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        selectTab(tab.pathname);
+      });
+      tab.addEventListener("keydown", (event) => {
+        let next;
+        if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+        else if (event.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        tabs[next].focus();
+        selectTab(tabs[next].pathname);
+      });
+    }
+    window.addEventListener("popstate", () => selectTab(location.pathname, null));
+    selectTab(location.pathname, "replace");
     const origin = window.location.origin;
     let accessKey = null,
       accessVisible = false,

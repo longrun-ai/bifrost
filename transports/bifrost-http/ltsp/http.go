@@ -75,10 +75,12 @@ func (m *Manager) Register(r *router.Router, middleware ...schemas.BifrostHTTPMi
 		}
 		return h
 	}
-	r.GET("/ltsp/accounts", chain(func(ctx *fasthttp.RequestCtx) {
-		ctx.SetContentType("text/html; charset=utf-8")
-		ctx.SetBody(m.AccountsPage)
-	}))
+	for _, path := range []string{"/ltsp/client", "/ltsp/groups", "/ltsp/accounts", "/ltsp/upstreams"} {
+		r.GET(path, chain(func(ctx *fasthttp.RequestCtx) {
+			ctx.SetContentType("text/html; charset=utf-8")
+			ctx.SetBody(m.AccountsPage)
+		}))
+	}
 	r.GET("/api/ltsp/accounts", chain(m.get))
 	r.PUT("/api/ltsp/accounts", chain(m.put))
 	r.PUT("/api/ltsp/assignments", chain(m.assign))

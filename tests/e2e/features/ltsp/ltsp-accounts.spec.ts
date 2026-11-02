@@ -35,6 +35,67 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("LTSP tabs keep draft nodes and use refreshable REST paths", async ({ page }) => {
+  let accounts: unknown[] = [];
+  await page.route("**/api/ltsp/accounts", async (route) => {
+    if (route.request().method() === "PUT") accounts = route.request().postDataJSON().accounts;
+    await route.fulfill({
+      json: {
+        accounts,
+        keys: {},
+        provider_schedules: schedules,
+        access_key_name: "ltsp-lan-clients",
+      },
+    });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("tab")).toHaveCount(4, { timeout: 1000 });
+  await expect(page).toHaveURL(/\/ltsp\/accounts$/);
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
+  await page.locator("#openai-python summary").click();
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await page.locator("#add").click();
+  const name = page.getByLabel("账号组名称");
+  await name.fill("Tab draft");
+  const node = await name.evaluateHandle((el) => el);
+  await page.getByRole("tab", { name: "上游配置", exact: true }).click();
+  await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("21:30");
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
+  await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/ltsp\/upstreams$/);
+  await expect(page.getByLabel("OpenAI 刷新截止时间", { exact: true })).toHaveValue("21:30");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/ltsp\/groups$/);
+  await expect(name).toHaveValue("Tab draft");
+  expect(
+    await node.evaluate((el) => el === document.querySelector("#accounts input[name=name]")),
+  ).toBeTruthy();
+  await page.locator("#save").click();
+  await expect(page.locator("#dirty-dot")).toBeHidden();
+  await page.reload();
+  await expect(page).toHaveURL(/\/ltsp\/groups$/);
+  await expect(name).toHaveValue("Tab draft");
+  for (const [path, label] of [
+    ["client", "客户端接入"],
+    ["groups", "账号组"],
+    ["accounts", "Bifrost 账号"],
+    ["upstreams", "上游配置"],
+  ]) {
+    await page.goto("/ltsp/" + path);
+    await expect(page.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("tabpanel")).toHaveCount(1);
+  }
+  const first = page.getByRole("tab", { name: "客户端接入", exact: true });
+  await first.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page).toHaveURL(/\/ltsp\/groups$/);
+  await expect(page.getByRole("tab", { name: "账号组", exact: true })).toBeFocused();
+});
+
 test("LTSP account editor reports the immediate funding probe", async ({ page }) => {
   let accounts: unknown[] = [];
   let providerSchedules = structuredClone(schedules);
@@ -66,14 +127,16 @@ test("LTSP account editor reports the immediate funding probe", async ({ page })
       });
     });
   });
-  await page.goto("/ltsp/accounts");
+  await page.goto("/ltsp/groups");
   await page.getByRole("button", { name: "添加账号组" }).click();
   await page.getByLabel("账号组名称").fill("Trial");
+  await page.getByRole("tab", { name: "上游配置", exact: true }).click();
   await page.getByLabel("OpenAI 探测模型", { exact: true }).fill("gpt-6.1-sol");
-  await page.locator("#save").click();
-  await expect(page.locator("#dirty-dot")).toBeHidden();
   await page.locator("#save-provider").click();
   await expect(page.locator("#provider-dirty-dot")).toBeHidden();
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await page.locator("#save").click();
+  await expect(page.locator("#dirty-dot")).toBeHidden();
   await page.getByRole("button", { name: "已到账，立即重试" }).click();
   await probeStarted;
   await expect(page.getByRole("button", { name: "正在探测…" })).toBeDisabled();
@@ -98,23 +161,27 @@ test("LTSP home explains client setup and keeps the account form open", async ({
       },
     });
   });
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "客户端接入" })).toBeVisible();
+  await page.goto("/ltsp/client");
+  await expect(page.getByRole("tab", { name: "客户端接入", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   const origin = new URL(page.url()).origin;
   await expect(page.locator("#openai-url")).toHaveText(origin + "/openai");
   await expect(page.locator("#access-status")).toHaveText("下游鉴权已启用");
   await expect(page.locator("#openai-example")).not.toContainText("sk-bf-fixture-current");
   await expect(page.locator("#anthropic-url")).toHaveText(origin + "/anthropic");
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
   await page.getByRole("button", { name: "添加账号组" }).click();
   await page.getByLabel("账号组名称").fill("Unsaved account");
   const popup = context.waitForEvent("page");
   await page.getByRole("link", { name: "调用统计" }).click();
   const stats = await popup;
   await stats.waitForURL("**/workspace/dashboard");
-  await expect(page).toHaveURL(origin + "/");
+  await expect(page).toHaveURL(origin + "/ltsp/groups");
   await expect(page.getByLabel("账号组名称")).toHaveValue("Unsaved account");
   await stats.close();
-  const links = await page.locator("a[href]").evaluateAll((nodes) =>
+  const links = await page.locator('a[href]:not([role="tab"])').evaluateAll((nodes) =>
     nodes.map((node) => ({
       target: node.getAttribute("target"),
       rel: node.getAttribute("rel"),
@@ -123,6 +190,7 @@ test("LTSP home explains client setup and keeps the account form open", async ({
   expect(
     links.every((link) => link.target === "_blank" && link.rel?.includes("noopener")),
   ).toBeTruthy();
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   const secure = await page.evaluate(() => window.isSecureContext);
   if (secure) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await expect(page.locator("#openai-example")).toBeHidden();
@@ -154,9 +222,10 @@ test("LTSP home rotates and replaces the client key without discarding the accou
       },
     }),
   );
-  await page.goto("/");
+  await page.goto("/ltsp/groups");
   await page.getByRole("button", { name: "添加账号组" }).click();
   await page.getByLabel("账号组名称").fill("Keep this form");
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   await page.getByRole("button", { name: "生成并轮换", exact: true }).click();
   await expect(page.locator("#downstream-key")).toHaveValue(
     "sk-bf-fixture-rotated-key-with-at-least-32-characters",
@@ -236,8 +305,8 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
       },
     });
   });
-  await page.goto("/");
-  const groups = page.getByRole("table", { name: "账号组", exact: true });
+  await page.goto("/ltsp/accounts");
+  const groups = page.locator("#account-groups table");
   await expect(groups.locator(".balance")).toHaveText(["未知", "未知"]);
   await expect(page.getByText("真实余额：未知", { exact: true })).toHaveCount(0);
   const openai = page.getByLabel("所属账号组：OpenAI account", { exact: true });
@@ -249,6 +318,7 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
   ]);
   await openai.selectOption("o-group");
   await expect(groups.locator('[data-id="o-group"] select[name=provider]')).toBeDisabled();
+  await page.getByRole("tab", { name: "上游配置", exact: true }).click();
   await page.getByLabel("OpenAI 时区类型", { exact: true }).selectOption("region");
   await page.getByLabel("OpenAI 地区时区", { exact: true }).fill("America/Los_Angeles");
   await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("20:30");
@@ -262,6 +332,7 @@ test("LTSP tables assign native accounts only to groups of the same provider", a
     cutoff: "20:30",
     probe_model: "preferred-model",
   });
+  await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
   await page.getByLabel("所属账号组：OpenAI account").selectOption("");
   await expect(page.locator("#account-message")).toHaveText("账号归属已保存。");
   await expect(page.getByLabel("所属账号组：OpenAI account")).toHaveValue("");
@@ -303,14 +374,14 @@ test("LTSP probe refreshes the shared provider model discovered by the gateway",
       json: { recovered: true, result: "调用成功，额度可用" },
     });
   });
-  await page.goto("/");
+  await page.goto("/ltsp/groups");
   await expect(page.getByLabel("OpenAI 探测模型", { exact: true })).toHaveValue("");
   await page.getByRole("button", { name: "已到账，立即重试", exact: true }).click();
   await expect(page.getByLabel("OpenAI 探测模型", { exact: true })).toHaveValue(
     "working-catalog-model",
   );
   await expect(page.getByRole("button", { name: "添加账号组", exact: true })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "保存配置", exact: true })).toBeDisabled();
+  await expect(page.locator("#save")).toBeDisabled();
 });
 
 test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll", async ({
@@ -367,8 +438,9 @@ test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll
     });
   });
   await page.setViewportSize({ width: 900, height: 700 });
-  await page.goto("/");
+  await page.goto("/ltsp/groups");
   await page.getByLabel("账号组名称").fill("Edited group");
+  await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
   const assignment = page.getByLabel("所属账号组：OpenAI account", { exact: true });
   await assignment.focus();
   const stable = await page.evaluateHandle(() => {
@@ -408,8 +480,10 @@ test("LTSP updates preserve DOM identity, focus, selection, expansion and scroll
       (saved) => document.activeElement === saved.select && saved.select.isConnected,
     ),
   ).toBeTruthy();
-  await page.getByRole("button", { name: "保存配置", exact: true }).click();
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
+  await page.locator("#save").click();
   await started;
+  await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   await stable.evaluate((saved) => {
     saved.summary.focus({ preventScroll: true });
     saved.scrollY = window.scrollY;
@@ -475,12 +549,13 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/ltsp/client");
   await expect(page.getByText("OpenAI 兼容客户端 Base URL", { exact: true })).toBeVisible();
   await expect(page.locator("#openai-example")).toBeHidden();
   await expect(page.locator("#anthropic-example")).toBeHidden();
   await page.locator("#openai-python summary").click();
   await expect(page.locator("#openai-python")).toContainText("/chat/completions");
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
   expect(
     await page
       .locator("#account-groups")
@@ -517,6 +592,7 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
   await expect(page.locator("#dirty-dot")).toBeVisible();
   await page.getByLabel("账号组名称").fill("Group");
   await expect(page.locator("#dirty-dot")).toBeHidden();
+  await page.getByRole("tab", { name: "上游配置", exact: true }).click();
   await page.getByLabel("OpenAI GMT 小时", { exact: true }).selectOption("+05");
   await page.getByLabel("OpenAI GMT 分钟", { exact: true }).selectOption("30");
   await expect(page.locator("#provider-dirty-dot")).toBeVisible();
@@ -524,6 +600,7 @@ test("LTSP compact controls keep examples folded, details floating and dirty sta
   await expect(page.locator("#provider-dirty-dot")).toBeHidden();
   expect(prefs[0].timezone).toBe("GMT+05:30");
   await expect(page.locator("#openai-python")).toHaveJSProperty("open", true);
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
   await page.getByLabel("账号组名称").fill("Write failure draft");
   fail = true;
   await page.locator("#save").click();
@@ -644,9 +721,11 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
     }
     await route.fulfill({ json: {} });
   });
-  await page.goto("/");
+  await page.goto("/ltsp/groups");
   await page.getByLabel("账号组名称").fill("Group draft");
+  await page.getByRole("tab", { name: "上游配置", exact: true }).click();
   await page.getByLabel("OpenAI 刷新截止时间", { exact: true }).fill("21:00");
+  await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
   await page.locator('[data-key-id="k"] .edit-account').click();
   await page.getByLabel("账号名称", { exact: true }).fill("Renamed account");
   await page.getByLabel("启用", { exact: true }).uncheck();
@@ -662,8 +741,8 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
   });
   await expect(page.getByLabel("账号组名称")).toHaveValue("Group draft");
   await expect(page.getByLabel("OpenAI 刷新截止时间", { exact: true })).toHaveValue("21:00");
-  await expect(page.locator("#dirty-dot")).toBeVisible();
-  await expect(page.locator("#provider-dirty-dot")).toBeVisible();
+  await expect(page.locator("#dirty-dot")).not.toHaveAttribute("hidden");
+  await expect(page.locator("#provider-dirty-dot")).not.toHaveAttribute("hidden");
   await page.locator('[data-key-id="k"] .edit-account').click();
   await page.getByLabel("API key", { exact: true }).fill("fixture-new-secret");
   await page.getByRole("button", { name: "保存账号", exact: true }).click();
@@ -688,10 +767,12 @@ test("LTSP native account CRUD saves immediately while preserving policy drafts"
   await expect(page.locator("#delete-account-error")).toContainText("delete failed");
   expect(keys.anthropic).toHaveLength(1);
   await page.locator("#cancel-delete-account").click();
+  await page.getByRole("tab", { name: "账号组", exact: true }).click();
   await page.locator("#save").click();
   await expect(page.locator("#dirty-dot")).toBeHidden();
   expect(prefs[0].cutoff).toBe("20:00");
-  await expect(page.locator("#provider-dirty-dot")).toBeVisible();
+  await expect(page.locator("#provider-dirty-dot")).not.toHaveAttribute("hidden");
+  await page.getByRole("tab", { name: "上游配置", exact: true }).click();
   await page.locator("#save-provider").click();
   await expect(page.locator("#provider-dirty-dot")).toBeHidden();
   expect(prefs[0].cutoff).toBe("21:00");
@@ -720,7 +801,7 @@ test("LTSP group layout fits split panes and controls follow light and dark them
       },
     }),
   );
-  await page.goto("/");
+  await page.goto("/ltsp/groups");
   await expect(page.getByLabel("OpenAI 地区时区", { exact: true })).toHaveValue(
     "America/Los_Angeles",
   );
@@ -778,6 +859,7 @@ test("LTSP group layout fits split panes and controls follow light and dark them
         100,
       );
     }
+    await page.getByRole("tab", { name: "Bifrost 账号", exact: true }).click();
     await page.getByRole("button", { name: "添加账号", exact: true }).click();
     const dialogColors = await page.locator("#account-provider").evaluate((el) => ({
       select: getComputedStyle(el).backgroundColor,
@@ -786,5 +868,6 @@ test("LTSP group layout fits split panes and controls follow light and dark them
     expect(dialogColors.select).toBe(colors.background);
     expect(dialogColors.option).toBe(colors.background);
     await page.locator("#account-cancel").click();
+    await page.getByRole("tab", { name: "账号组", exact: true }).click();
   }
 });

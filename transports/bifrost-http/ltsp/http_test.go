@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -110,6 +111,24 @@ func TestShellKeepsAccountHomeAndLinksSeparate(t *testing.T) {
 	got := string(m.Shell(&req, []byte("<body>native dashboard</body>")))
 	if !strings.Contains(got, "native dashboard") || !strings.Contains(got, `href="/" target="_blank" rel="noopener noreferrer"`) {
 		t.Fatal("workspace page or separate home link was lost")
+	}
+}
+
+func TestAccountTabRoutesServeTheSharedPage(t *testing.T) {
+	m := manager(t)
+	m.AccountsPage = []byte("<html>account tab shell</html>")
+	r := router.New()
+	m.Register(r)
+	for _, path := range []string{"/ltsp/client", "/ltsp/groups", "/ltsp/accounts", "/ltsp/upstreams"} {
+		t.Run(path, func(t *testing.T) {
+			var req fasthttp.RequestCtx
+			req.Request.SetRequestURI(path)
+			req.Request.Header.SetMethod("GET")
+			r.Handler(&req)
+			if req.Response.StatusCode() != 200 || string(req.Response.Body()) != string(m.AccountsPage) {
+				t.Fatalf("direct tab URL cannot refresh: %s %d %s", path, req.Response.StatusCode(), req.Response.Body())
+			}
+		})
 	}
 }
 
