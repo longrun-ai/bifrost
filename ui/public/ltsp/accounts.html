@@ -56,11 +56,11 @@
       color: var(--muted);
     }
     .tab-panel {
-      margin: 24px 0;
+      margin: 16px 0;
     }
     .tabs {
       gap: 4px;
-      margin-top: 28px;
+      margin-top: 12px;
       border-bottom: 1px solid var(--control-border);
     }
     .tabs a {
@@ -663,8 +663,8 @@
     <div class="bar">
       <div>
         <h1>LAN API 网关</h1>
-        <p>账号归组、调用统计与额度恢复</p>
       </div>
+      <div id="message" role="status" aria-live="polite"></div>
     </div>
     <nav class="tabs" role="tablist" aria-label="网关管理">
       <a id="tab-client" role="tab" href="/ltsp/client" aria-controls="client-config" aria-selected="false" tabindex="-1">客户端接入</a>
@@ -672,9 +672,6 @@
       <a id="tab-accounts" role="tab" href="/ltsp/accounts" aria-controls="native-accounts" aria-selected="false" tabindex="-1">Bifrost 账号</a>
       <a id="tab-upstreams" role="tab" href="/ltsp/upstreams" aria-controls="upstream-settings" aria-selected="false" tabindex="-1">上游配置</a>
     </nav>
-    <div class="bar">
-      <div id="message" role="status" aria-live="polite"></div>
-    </div>
     <section id="client-config" class="tab-panel" role="tabpanel" aria-labelledby="tab-client" data-testid="ltsp-client-config" hidden>
       <h2 id="client-config-title" class="sr-only">客户端接入</h2>
       <p>

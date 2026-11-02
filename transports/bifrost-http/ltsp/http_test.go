@@ -104,7 +104,8 @@ func TestShellKeepsAccountHomeAndLinksSeparate(t *testing.T) {
 	m.AccountsPage = []byte("<html>account home</html>")
 	var req fasthttp.RequestCtx
 	req.Request.SetRequestURI("/")
-	if got := m.Shell(&req, []byte("<body>native dashboard</body>")); len(got) != 0 || req.Response.StatusCode() != 302 || string(req.Response.Header.Peek("Location")) != "/ltsp/groups" {
+	req.Request.Header.SetHost("gateway.test")
+	if got := m.Shell(&req, []byte("<body>native dashboard</body>")); len(got) != 0 || req.Response.StatusCode() != 302 || string(req.Response.Header.Peek("Location")) != "http://gateway.test/ltsp/groups" {
 		t.Fatal("root did not redirect to account groups")
 	}
 	req.Request.SetRequestURI("/workspace/dashboard")
