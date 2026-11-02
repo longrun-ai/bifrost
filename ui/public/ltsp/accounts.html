@@ -343,6 +343,9 @@
       flex-shrink: 0;
       padding: 5px 10px;
     }
+    .copy-line .icon-button {
+      padding: 5px;
+    }
     pre {
       padding: 18px;
       border-radius: 9px;
@@ -678,15 +681,22 @@
           readonly
           autocomplete="off"
           placeholder="正在读取…"
-        /><button type="button" class="secondary" id="show-access">显示</button
-        ><button type="button" class="secondary" data-copy="downstream-key" disabled>
-          复制 Key</button>
+        /><button type="button" class="secondary icon-button" id="show-access" aria-label="显示 Key" title="显示 Key" aria-pressed="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18" hidden/>
+          </svg>
+        </button
+        ><button type="button" class="secondary icon-button" data-copy="downstream-key" aria-label="复制 Key" title="复制 Key" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <g class="copy-symbol"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></g><path class="copied-symbol" d="m5 12 4 4L19 6" hidden/>
+          </svg>
+        </button>
       </div>
       <p id="access-message" role="status" aria-live="polite"></p>
+      <span id="copy-status" class="sr-only" role="status" aria-live="polite"></span>
       <div class="access-rotation">
-        <button type="button" id="rotate-access" disabled>生成并轮换</button>
-        <small>轮换后旧 Key 立即失效，请同步更新客户端。示例默认隐藏
-        Key，复制配置时会自动填入当前有效值。</small>
+        <button type="button" id="rotate-access" disabled>生成新 Key 并轮换</button>
+        <small>轮换后旧 Key 立即失效，请同步更新客户端。</small>
       </div>
       <details>
         <summary>手动设置新的接入 Key</summary>
@@ -706,7 +716,11 @@
           <strong>OpenAI 兼容客户端 Base URL</strong>
           <div class="copy-line">
             <code id="openai-url"></code
-            ><button type="button" class="secondary" data-copy="openai-url">复制地址</button>
+            ><button type="button" class="secondary icon-button" data-copy="openai-url" aria-label="复制 OpenAI 地址" title="复制 OpenAI 地址">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <g class="copy-symbol"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></g><path class="copied-symbol" d="m5 12 4 4L19 6" hidden/>
+              </svg>
+            </button>
           </div>
           <details id="openai-python">
             <summary>Python 配置</summary>
@@ -716,6 +730,7 @@
               <code>client.responses.create()</code
               >、<code>client.chat.completions.create()</code>、<code>client.completions.create()</code>；模型须支持对应接口。
             </p>
+            <small>示例默认隐藏 Key，复制配置时会自动填入当前有效值。</small>
             <pre id="openai-example"></pre>
             <button type="button" class="secondary" data-copy="openai-example">
               复制 Python 配置
@@ -735,13 +750,18 @@
           <strong>Anthropic 客户端 Base URL</strong>
           <div class="copy-line">
             <code id="anthropic-url"></code
-            ><button type="button" class="secondary" data-copy="anthropic-url">复制地址</button>
+            ><button type="button" class="secondary icon-button" data-copy="anthropic-url" aria-label="复制 Anthropic 地址" title="复制 Anthropic 地址">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <g class="copy-symbol"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></g><path class="copied-symbol" d="m5 12 4 4L19 6" hidden/>
+              </svg>
+            </button>
           </div>
           <details id="anthropic-python">
             <summary>Python 配置</summary>
             <p>
               使用 <code>client.messages.create()</code>，SDK 会追加 <code>/v1/messages</code>。
             </p>
+            <small>示例默认隐藏 Key，复制配置时会自动填入当前有效值。</small>
             <pre id="anthropic-example"></pre>
             <button type="button" class="secondary" data-copy="anthropic-example">
               复制 Python 配置
@@ -1129,9 +1149,13 @@
       const value = accessKey?.value || "";
       setProp($("#downstream-key"), "value", value);
       setProp($("#downstream-key"), "type", accessVisible ? "text" : "password");
-      setText($("#show-access"), accessVisible ? "隐藏" : "显示");
+      const show = $("#show-access"), label = accessVisible ? "隐藏 Key" : "显示 Key";
+      setAttr(show, "aria-label", label);
+      setAttr(show, "title", label);
+      setAttr(show, "aria-pressed", String(accessVisible));
+      show.querySelector(".eye-slash").toggleAttribute("hidden", !accessVisible);
       setText($("#access-status"), accessEnforced ? "下游鉴权已启用" : "下游鉴权未启用");
-      setText($("#rotate-access"), accessKey ? "生成并轮换" : "创建接入 Key");
+      setText($("#rotate-access"), accessKey ? "生成新 Key 并轮换" : "创建接入 Key");
       setProp($("#rotate-access"), "disabled", false);
       setProp($("#save-access"), "disabled", !accessKey);
       copyValues["downstream-key"] = value;
@@ -1243,24 +1267,41 @@
           if (previousFocus !== document.activeElement)
             previousFocus?.focus({ preventScroll: true });
         }
-        const label = button.dataset.copyLabel || button.textContent;
+        const label = button.dataset.copyLabel || button.getAttribute("aria-label") || button.textContent;
         if (!button.dataset.copyLabel) button.dataset.copyLabel = label;
+        const icon = button.querySelector(".copy-symbol"), check = button.querySelector(".copied-symbol");
         if (copied) {
-          setText(button, "已复制");
-          setTimeout(() => {
-            setText(button, label);
+          if (icon) {
+            icon.toggleAttribute("hidden", true);
+            check.toggleAttribute("hidden", false);
+            setAttr(button, "title", "已复制");
+          } else setText(button, "已复制");
+          setText($("#copy-status"), label + "成功");
+          clearTimeout(button.copyTimer);
+          button.copyTimer = setTimeout(() => {
+            if (icon) {
+              icon.toggleAttribute("hidden", false);
+              check.toggleAttribute("hidden", true);
+              setAttr(button, "title", label);
+            } else setText(button, label);
           }, 1800);
         } else {
           if (Object.hasOwn(copyValues, source.id)) {
             accessVisible = true;
             renderAccess();
           }
-          const range = document.createRange();
-          range.selectNodeContents(source);
-          const selection = window.getSelection();
-          selection.removeAllRanges();
-          selection.addRange(range);
-          setText(button, "已选中，请按 Ctrl+C");
+          if (source instanceof HTMLInputElement) {
+            source.focus();
+            source.select();
+          } else {
+            const range = document.createRange();
+            range.selectNodeContents(source);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+          message("复制未完成，内容已选中，请按 Ctrl+C。", true);
+          if (!icon) setText(button, "已选中，请按 Ctrl+C");
         }
       };
     const providerName = (p) => ({ openai: "OpenAI", anthropic: "Anthropic" })[p] || p;

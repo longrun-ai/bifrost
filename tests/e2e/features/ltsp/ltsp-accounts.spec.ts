@@ -294,6 +294,20 @@ test("LTSP home explains client setup and keeps the account form open", async ({
   await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
   const secure = await page.evaluate(() => window.isSecureContext);
   if (secure) await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  for (const [label, value] of [
+    ["复制 Key", "sk-bf-fixture-current-key-with-at-least-32-characters"],
+    ["复制 OpenAI 地址", origin + "/openai"],
+  ]) {
+    const button = page.getByRole("button", { name: label, exact: true });
+    const icon = await button.locator("svg").evaluateHandle((el) => el);
+    await button.click();
+    await expect(button.locator(".copy-symbol")).toBeHidden();
+    await expect(button.locator(".copied-symbol")).toBeVisible();
+    await expect(button).toHaveAttribute("title", "已复制");
+    if (secure) expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(value);
+    await expect(button.locator(".copy-symbol")).toBeVisible();
+    expect(await icon.evaluate((el) => el.isConnected)).toBeTruthy();
+  }
   await expect(page.locator("#openai-example")).toBeHidden();
   await page.locator("#openai-python summary").click();
   await page.locator('[data-copy="openai-example"]').click();
@@ -327,7 +341,7 @@ test("LTSP home rotates and replaces the client key without discarding the accou
   await page.getByRole("button", { name: "添加账号组" }).click();
   await page.getByLabel("账号组名称").fill("Keep this form");
   await page.getByRole("tab", { name: "客户端接入", exact: true }).click();
-  await page.getByRole("button", { name: "生成并轮换", exact: true }).click();
+  await page.getByRole("button", { name: "生成新 Key 并轮换", exact: true }).click();
   await expect(page.locator("#downstream-key")).toHaveValue(
     "sk-bf-fixture-rotated-key-with-at-least-32-characters",
   );
@@ -340,7 +354,15 @@ test("LTSP home rotates and replaces the client key without discarding the accou
   await page.locator("#custom-access").fill(custom);
   await page.getByRole("button", { name: "保存并替换旧 Key" }).click();
   await expect(page.locator("#downstream-key")).toHaveValue(custom);
-  await page.getByRole("button", { name: "显示", exact: true }).click();
+  await page.getByRole("button", { name: "显示 Key", exact: true }).click();
+  const eye = await page.locator("#show-access svg").evaluateHandle((el) => el);
+  await expect(page.locator("#show-access .eye-slash")).toBeVisible();
+  await page.getByRole("button", { name: "隐藏 Key", exact: true }).click();
+  await expect(page.locator("#show-access .eye-slash")).toBeHidden();
+  expect(
+    await eye.evaluate((el) => el === document.querySelector("#show-access svg")),
+  ).toBeTruthy();
+  await page.getByRole("button", { name: "显示 Key", exact: true }).click();
   await expect(page.locator("#openai-example")).toContainText(custom);
   await page.locator("#openai-python summary").click();
   const secure = await page.evaluate(() => window.isSecureContext);
